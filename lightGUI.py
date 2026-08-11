@@ -24,6 +24,7 @@ from system_info import monitor_content, service_content
 WIDTH = 128
 HEIGHT = 64
 I2C_ADDRESS = 0x3C
+SUPPORTED_I2C_ADDRESSES = (0x3C, 0x3D)
 REFRESH_SECONDS = 10.0
 
 BUTTON_DOWN_GPIO = 5    # Down/Back, physical pin 29
@@ -82,8 +83,9 @@ SCREENS = (
 class Dashboard:
     def __init__(self):
         self.i2c = board.I2C()  # GPIO3/SCL (pin 5), GPIO2/SDA (pin 3)
+        address = self._detect_oled_address()
         self.oled = adafruit_ssd1306.SSD1306_I2C(
-            WIDTH, HEIGHT, self.i2c, addr=I2C_ADDRESS
+            WIDTH, HEIGHT, self.i2c, addr=address
         )
         self.events = SimpleQueue()
         self.wake = Event()
@@ -102,6 +104,31 @@ class Dashboard:
         self.action_mode = False
         self.last_refresh = 0.0
         self.last_frame = None
+
+    def _detect_oled_address(self) -> int:
+        """Find a common SSD1306 address and provide a useful startup error."""
+        deadline = time.monotonic() + 2.0
+        while not self.i2c.try_lock():
+            if time.monotonic() >= deadline:
+                raise RuntimeError("I2C bus is busy")
+            time.sleep(0.01)
+        try:
+            addresses = self.i2c.scan()
+        except OSError as error:
+            raise RuntimeError(f"I2C scan failed: {error}") from error
+        finally:
+            self.i2c.unlock()
+
+        if I2C_ADDRESS in addresses:
+            return I2C_ADDRESS
+        for address in SUPPORTED_I2C_ADDRESSES:
+            if address in addresses:
+                print(f"OLED detected at 0x{address:02X}")
+                return address
+        found = ", ".join(f"0x{address:02X}" for address in addresses) or "none"
+        raise RuntimeError(
+            f"SSD1306 not detected (expected 0x3C/0x3D; found: {found})"
+        )
 
     def _make_button(self, gpio: int, event_name: str):
         button = Button(gpio, pull_up=True, bounce_time=0.05)
@@ -271,6 +298,9 @@ def main():
     try:
         dashboard = Dashboard()
         dashboard.run()
+    except (OSError, RuntimeError) as error:
+        print(f"Startup failed: {error}")
+        raise SystemExit(1) from error
     finally:
         if dashboard is not None and not dashboard.shutdown_in_progress:
             dashboard.close()

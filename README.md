@@ -183,6 +183,32 @@ pip install -r requirements.txt
 GPIOZERO_PIN_FACTORY=lgpio python lightGUI.py
 ```
 
+## I²C troubleshooting
+
+At startup, the application scans the bus and accepts the two common SSD1306
+addresses, `0x3C` and `0x3D`. If startup reports that no SSD1306 was detected,
+stop the service and inspect bus 1:
+
+```bash
+raspilightgui-service stop
+ls -l /dev/i2c-1
+i2cdetect -y 1
+```
+
+The address table should contain `3c` or `3d`. If every position is `--`, check:
+
+- OLED VCC to Pi 3.3 V (physical pin 1 or 17), never 5 V unless the exact module
+  explicitly supports it;
+- OLED GND to a Pi GND pin;
+- OLED SDA to GPIO2, physical pin 3;
+- OLED SCL to GPIO3, physical pin 5;
+- I²C enabled with `sudo raspi-config nonint do_i2c 0` followed by a reboot.
+
+If `i2cdetect` shows another address, confirm that the display controller really
+is an SSD1306. An `Errno 121 Remote I/O error` means that the addressed device did
+not acknowledge the I²C transaction and normally indicates address, wiring, or
+hardware rather than a Python failure.
+
 ## Extending the dashboard
 
 The screen registry is the `SCREENS` tuple in `lightGUI.py`:
