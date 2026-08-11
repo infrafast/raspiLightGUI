@@ -62,7 +62,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y i2c-tools python3 python3-venv python3-gpiozero python3-lgpio
+apt-get install -y fonts-dejavu-core i2c-tools python3 python3-venv python3-gpiozero python3-lgpio
 if command -v raspi-config >/dev/null 2>&1; then
   raspi-config nonint do_i2c 0
 fi

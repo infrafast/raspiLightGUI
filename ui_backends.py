@@ -2,6 +2,7 @@
 
 from queue import Empty, SimpleQueue
 import os
+from pathlib import Path
 import select
 import sys
 from threading import Event
@@ -29,17 +30,38 @@ class OledView:
         )
         self.image = Image.new("1", (WIDTH, HEIGHT))
         self.draw = ImageDraw.Draw(self.image)
-        self.font = ImageFont.load_default()
+        self.title_fonts, self.body_fonts = self._load_fonts(ImageFont)
         self.last_frame = None
 
-    def _fit_text(self, text: str, max_width: int) -> str:
-        """Trim text using its actual rendered pixel width."""
-        if self.draw.textlength(text, font=self.font) <= max_width:
-            return text
+    @staticmethod
+    def _load_fonts(image_font):
+        """Load a proportional condensed font, with a built-in fallback."""
+        candidates = (
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf"),
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        )
+        font_path = next((path for path in candidates if path.is_file()), None)
+        if font_path is None:
+            fallback = image_font.load_default()
+            return (fallback,), (fallback,)
+        title_fonts = tuple(
+            image_font.truetype(str(font_path), size) for size in (10, 9, 8)
+        )
+        body_fonts = tuple(
+            image_font.truetype(str(font_path), size) for size in (9, 8, 7)
+        )
+        return title_fonts, body_fonts
+
+    def _fit_text(self, text: str, max_width: int, fonts):
+        """Choose the largest fitting font, then trim only as a last resort."""
+        for font in fonts:
+            if self.draw.textlength(text, font=font) <= max_width:
+                return text, font
+        font = fonts[-1]
         suffix = "..."
-        while text and self.draw.textlength(text + suffix, font=self.font) > max_width:
+        while text and self.draw.textlength(text + suffix, font=font) > max_width:
             text = text[:-1]
-        return text + suffix
+        return text + suffix, font
 
     def _detect_address(self) -> int:
         deadline = time.monotonic() + 2.0
@@ -70,13 +92,14 @@ class OledView:
         if frame == self.last_frame:
             return
         self.draw.rectangle((0, 0, WIDTH, HEIGHT), fill=0)
-        title = self._fit_text(title, WIDTH)
-        self.draw.text((0, 0), title, font=self.font, fill=255)
+        title, title_font = self._fit_text(title, WIDTH, self.title_fonts)
+        self.draw.text((0, 0), title, font=title_font, fill=255)
         for index, text in enumerate(lines[:5]):
             prefix = ">" if selected == index else " "
-            self.draw.text((0, 12 + index * 10), prefix, font=self.font, fill=255)
-            text = self._fit_text(text, WIDTH - 8)
-            self.draw.text((8, 12 + index * 10), text, font=self.font, fill=255)
+            text, body_font = self._fit_text(text, WIDTH - 8, self.body_fonts)
+            y = 12 + index * 10
+            self.draw.text((0, y), prefix, font=body_font, fill=255)
+            self.draw.text((8, y), text, font=body_font, fill=255)
         self.oled.image(self.image)
         self.oled.show()
         self.last_frame = frame
@@ -142,14 +165,22 @@ class ConsoleView:
     def __init__(self):
         self.last_frame = None
 
+    @staticmethod
+    def _fit_text(text: str, width: int) -> str:
+        if len(text) <= width:
+            return text
+        if width <= 3:
+            return "." * width
+        return text[: width - 3] + "..."
+
     def display(self, title: str, lines: list[str], selected: int | None = None):
         frame = (title, tuple(lines[:5]), selected)
         if frame == self.last_frame:
             return
-        rows = [title[:21]]
+        rows = [self._fit_text(title, 21)]
         for index, text in enumerate(lines[:5]):
             prefix = ">" if selected == index else " "
-            rows.append(f"{prefix}{text}"[:21])
+            rows.append(prefix + self._fit_text(text, 20))
         rows.extend([""] * (6 - len(rows)))
         print("\033[2J\033[H", end="")
         print("+---------------------+")

@@ -113,6 +113,7 @@ sudo ./raspi_service_pack/install.sh --service-user pi
 The installer:
 
 - installs the Python, I²C, GPIO Zero and `lgpio` dependencies;
+- installs the proportional DejaVu font used by the OLED renderer;
 - enables the Raspberry Pi I²C interface;
 - creates `.venv` and installs `requirements.txt`;
 - adds the service account to the `gpio` and `i2c` groups;
@@ -164,8 +165,9 @@ systemd retries after five seconds without emitting a Python traceback.
   information screen currently displayed.
 - The `eth0` address is cached and checked at most once per minute.
 - The OLED buffer is sent over I²C only when the rendered content has changed.
-- Text is measured using the active font and shortened with `...` when its real
-  pixel width would exceed the 128-pixel OLED width.
+- OLED text uses proportional DejaVu Sans Condensed when available. Each title
+  and body line selects the largest configured size that fits its measured pixel
+  width and is shortened with `...` only as a final fallback.
 - Action screens do not have a periodic refresh.
 - Button debounce is handled at the GPIO event layer with a 50 ms interval.
 
@@ -278,6 +280,10 @@ Keyboard controls:
 - Right or Down: next screen/item
 - Enter: OK
 - `q`: quit
+
+The console keeps a fixed 21-character display width. Long titles and content
+are shortened with `...`; unlike the OLED backend, the terminal backend does not
+attempt to reduce a font size.
 
 ### Behaviour under systemd
 
