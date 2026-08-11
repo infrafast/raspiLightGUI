@@ -177,8 +177,16 @@ The MONITOR page reads the Pi 5 PMIC input with
 `vcgencmd pmic_read_adc EXT5V_V` and displays a compact line such as:
 
 ```text
-T:45.0C V:5.08 OK
+T:45.0C OK V:5.08 OK
 ```
+
+Temperature states deliberately flag heat before thermal throttling:
+
+| State | Condition |
+|-------|-----------|
+| `OK` | Temperature below 70 °C |
+| `HIGH` | Temperature from 70 °C up to, but not including, 80 °C |
+| `CRIT` | Temperature at or above 80 °C |
 
 Power states use these thresholds:
 

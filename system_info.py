@@ -13,22 +13,36 @@ POWER_OK_VOLTS = 4.80
 # The hardware threshold is approximately 4.63 V. Use 4.65 V so the UI warns
 # just before that threshold is crossed.
 POWER_CRITICAL_VOLTS = 4.65
+TEMP_HIGH_C = 70.0
+TEMP_CRITICAL_C = 80.0
 _cached_ip = "DOWN"
 _last_ip_refresh = 0.0
 
 
-def _temperature() -> str:
+def _temperature_info() -> tuple[float | None, str]:
     try:
         temperatures = psutil.sensors_temperatures()
     except (AttributeError, OSError):
-        return "N/A"
+        return None, "N/A"
+    value = None
     for sensor_name in ("cpu_thermal", "soc_thermal"):
         if temperatures.get(sensor_name):
-            return f"{temperatures[sensor_name][0].current:.1f} C"
-    for readings in temperatures.values():
-        if readings:
-            return f"{readings[0].current:.1f} C"
-    return "N/A"
+            value = temperatures[sensor_name][0].current
+            break
+    if value is None:
+        for readings in temperatures.values():
+            if readings:
+                value = readings[0].current
+                break
+    if value is None:
+        return None, "N/A"
+    if value >= TEMP_CRITICAL_C:
+        state = "CRIT"
+    elif value >= TEMP_HIGH_C:
+        state = "HIGH"
+    else:
+        state = "OK"
+    return value, state
 
 
 def _uptime() -> str:
@@ -99,9 +113,10 @@ def monitor_content() -> list[str]:
     memory = psutil.virtual_memory().percent
     voltage, power_state = _power_info()
     voltage_text = f"{voltage:.2f}" if voltage is not None else "N/A"
-    temperature = _temperature().replace(" C", "C")
+    temperature, temperature_state = _temperature_info()
+    temperature_text = f"{temperature:.1f}C" if temperature is not None else "N/A"
     return [
-        f"T:{temperature} V:{voltage_text} {power_state}",
+        f"T:{temperature_text} {temperature_state} V:{voltage_text} {power_state}",
         f"Uptime: {_uptime()}",
         f"CPU:{cpu:3.0f}% RAM:{memory:3.0f}%",
         f"Disk: {disk:.0f}%",
