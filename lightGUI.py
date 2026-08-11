@@ -40,6 +40,7 @@ class ActionItem:
 class ActionScreen:
     title: str
     items: tuple[ActionItem, ...]
+    default_index: int = 0
 
 
 # Model: add screens and plug regular Python callables into this registry.
@@ -61,6 +62,7 @@ SCREENS = (
             ),
             ActionItem("Back"),
         ),
+        default_index=3,
     ),
 )
 
@@ -103,8 +105,8 @@ class DashboardPresenter:
 
     def move_screen(self, offset: int):
         self.screen_index = (self.screen_index + offset) % len(SCREENS)
-        self.item_index = 0
         self.action_mode = isinstance(self.screen, ActionScreen)
+        self.item_index = self.screen.default_index if self.action_mode else 0
         self.render()
 
     def move_action(self, offset: int):
@@ -172,6 +174,7 @@ class DashboardPresenter:
                     self.run_action()
                 else:
                     self.action_mode = True
+                    self.item_index = self.screen.default_index
                     self.render()
             elif event == "quit":
                 self.request_stop()
