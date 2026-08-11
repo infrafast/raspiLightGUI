@@ -32,6 +32,15 @@ class OledView:
         self.font = ImageFont.load_default()
         self.last_frame = None
 
+    def _fit_text(self, text: str, max_width: int) -> str:
+        """Trim text using its actual rendered pixel width."""
+        if self.draw.textlength(text, font=self.font) <= max_width:
+            return text
+        suffix = "..."
+        while text and self.draw.textlength(text + suffix, font=self.font) > max_width:
+            text = text[:-1]
+        return text + suffix
+
     def _detect_address(self) -> int:
         deadline = time.monotonic() + 2.0
         while not self.i2c.try_lock():
@@ -61,11 +70,13 @@ class OledView:
         if frame == self.last_frame:
             return
         self.draw.rectangle((0, 0, WIDTH, HEIGHT), fill=0)
-        self.draw.text((0, 0), title[:21], font=self.font, fill=255)
+        title = self._fit_text(title, WIDTH)
+        self.draw.text((0, 0), title, font=self.font, fill=255)
         for index, text in enumerate(lines[:5]):
             prefix = ">" if selected == index else " "
             self.draw.text((0, 12 + index * 10), prefix, font=self.font, fill=255)
-            self.draw.text((8, 12 + index * 10), text[:20], font=self.font, fill=255)
+            text = self._fit_text(text, WIDTH - 8)
+            self.draw.text((8, 12 + index * 10), text, font=self.font, fill=255)
         self.oled.image(self.image)
         self.oled.show()
         self.last_frame = frame

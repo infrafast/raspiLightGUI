@@ -49,7 +49,8 @@ of each button to its GPIO pin and connect their common side to physical GND pin
 
 Refreshed every 10 seconds:
 
-- CPU temperature and system uptime
+- CPU temperature, Pi 5 input voltage and power state
+- System uptime
 - CPU, RAM and root filesystem usage
 - IPv4 address of `eth0`
 
@@ -163,8 +164,33 @@ systemd retries after five seconds without emitting a Python traceback.
   information screen currently displayed.
 - The `eth0` address is cached and checked at most once per minute.
 - The OLED buffer is sent over I²C only when the rendered content has changed.
+- Text is measured using the active font and shortened with `...` when its real
+  pixel width would exceed the 128-pixel OLED width.
 - Action screens do not have a periodic refresh.
 - Button debounce is handled at the GPIO event layer with a 50 ms interval.
+
+### Pi 5 power state
+
+The MONITOR page reads the Pi 5 PMIC input with
+`vcgencmd pmic_read_adc EXT5V_V` and displays a compact line such as:
+
+```text
+T:45.0C V:5.08 OK
+```
+
+Power states use these thresholds:
+
+| State | Condition |
+|-------|-----------|
+| `OK` | 5 V input is at least 4.80 V |
+| `LOW` | 5 V input is above 4.65 V and below 4.80 V |
+| `CRIT` | 5 V input is at or below 4.65 V, or the current undervoltage bit from `vcgencmd get_throttled` is set |
+| `N/A` | The PMIC reading is unavailable or unsupported |
+
+The 4.80 V reliability target and approximately 4.63 V hardware undervoltage
+threshold follow Raspberry Pi guidance. The UI deliberately uses 4.65 V as its
+critical boundary to provide a small safety margin. These values describe the
+Pi input, not an adjustable CPU core voltage.
 
 The service-pack commands must be installed at:
 
