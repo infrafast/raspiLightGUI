@@ -65,7 +65,29 @@ def monitor_content() -> list[str]:
     ]
 
 
-def _command_status(command: list[str]) -> str:
+def _systemd_status(service: str) -> str:
+    try:
+        result = subprocess.run(
+            ["systemctl", "is-active", service],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "UNKNOWN"
+    state = result.stdout.strip().lower()
+    return {
+        "active": "UP",
+        "activating": "STARTING",
+        "reloading": "STARTING",
+        "deactivating": "STOPPING",
+        "inactive": "DOWN",
+        "failed": "FAILED",
+    }.get(state, "UNKNOWN")
+
+
+def _process_status(command: list[str]) -> str:
     try:
         result = subprocess.run(
             command, capture_output=True, text=True, timeout=3, check=False
@@ -76,17 +98,24 @@ def _command_status(command: list[str]) -> str:
 
 
 def _oculizer_status() -> str:
-    active = _command_status(["systemctl", "is-active", "--quiet", "oculizer"])
+    active = _systemd_status("oculizer.service")
     if active != "UP":
         return active
-    enabled = _command_status(["systemctl", "is-enabled", "--quiet", "oculizer"])
-    return "AUTO" if enabled == "UP" else "MANUAL"
+    try:
+        enabled = subprocess.run(
+            ["systemctl", "is-enabled", "--quiet", "oculizer.service"],
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "UNKNOWN"
+    return "AUTO" if enabled.returncode == 0 else "MANUAL"
 
 
 def service_content() -> list[str]:
     """Return current systemd/process states without invoking a shell."""
     return [
         f"OCULIZER: {_oculizer_status()}",
-        f"ASSISTANT: {_command_status(['systemctl', 'is-active', '--quiet', 'livestageassistant'])}",
-        f"QLC+: {_command_status(['pgrep', '-f', 'qlcplus-qml'])}",
+        f"ASSISTANT: {_systemd_status('livestageassistant.service')}",
+        f"QLC+: {_process_status(['pgrep', '-f', 'qlcplus-qml'])}",
     ]

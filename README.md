@@ -55,8 +55,10 @@ Refreshed every 10 seconds:
 
 ### SERVICE STATE
 
-- Oculizer systemd state: `AUTO`, `MANUAL`, `DOWN`, or `UNKNOWN`
-- Live Stage Assistant systemd state: `UP`, `DOWN`, or `UNKNOWN`
+- Oculizer systemd state: `AUTO`, `MANUAL`, `STARTING`, `STOPPING`, `FAILED`,
+  `DOWN`, or `UNKNOWN`
+- Live Stage Assistant systemd state: `UP`, `STARTING`, `STOPPING`, `FAILED`,
+  `DOWN`, or `UNKNOWN`
 - `qlcplus-qml` process state
 
 ### SYSTEM
@@ -114,7 +116,7 @@ The installer:
 - adds the service account to the `gpio` and `i2c` groups;
 - installs `raspilightgui.service` and its lifecycle command;
 - installs narrowly scoped passwordless permissions for service control and
-  system shutdown;
+  system shutdown, plus restarting `livestageassistant.service` from the OLED;
 - leaves the current enabled/running state unchanged.
 
 Enable at boot and start immediately:
@@ -174,6 +176,30 @@ The dashboard user must own the running QLC+ process so that it can read and
 restart it. The installer creates the narrowly scoped shutdown and service
 control permissions automatically.
 
+The Live Stage Assistant wrapper calls `sudo systemctl restart`. Since the OLED
+service cannot enter an interactive password, the installer permits only this
+exact additional command for the configured service user:
+
+```text
+/usr/bin/systemctl restart livestageassistant.service
+```
+
+This is not a general passwordless `sudo` permission. After upgrading an
+existing raspiLightGUI installation, rerun the installer once to deploy the new
+rule:
+
+```bash
+sudo ./raspi_service_pack/install.sh --service-user pi
+sudo -u pi sudo -n /usr/bin/systemctl restart livestageassistant.service
+```
+
+The second command is an optional verification: it must complete without asking
+for a password. The equivalent interactive wrapper command will then work too:
+
+```bash
+livestageassistant restart
+```
+
 ## Manual development run
 
 For development without installing the systemd unit:
@@ -185,6 +211,28 @@ python3 -m venv .venv --system-site-packages
 source .venv/bin/activate
 pip install -r requirements.txt
 GPIOZERO_PIN_FACTORY=lgpio python lightGUI.py
+```
+
+### Available launch modes
+
+After activating `.venv`, the application can be started in any of these modes:
+
+```bash
+python lightGUI.py --backend auto
+python lightGUI.py --backend hardware
+python lightGUI.py --backend console
+```
+
+| Mode | Behaviour |
+|------|-----------|
+| `auto` | Tries the OLED and GPIO buttons first. If hardware initialization fails in an interactive TTY, it falls back to the console simulator. Without a TTY, it exits with an error. |
+| `hardware` | Requires the SSD1306 and initializes the GPIO buttons. Missing hardware produces a short startup error; no console fallback is attempted. |
+| `console` | Does not initialize the OLED or GPIO. It simulates the complete interface in an interactive terminal. |
+
+Omitting `--backend` is equivalent to selecting `auto`:
+
+```bash
+python lightGUI.py
 ```
 
 ### Console simulation
@@ -204,11 +252,31 @@ Keyboard controls:
 - Enter: OK
 - `q`: quit
 
-The default `--backend auto` first tries the OLED and GPIO buttons. If hardware
-initialization fails and stdin/stdout are attached to an interactive TTY, it
-prints the hardware error and automatically starts the console simulator. With
-no interactive TTY it exits cleanly instead. Use `--backend hardware` to disable
-fallback explicitly.
+### Behaviour under systemd
+
+The installed unit always executes:
+
+```text
+lightGUI.py --backend hardware
+```
+
+Console fallback is deliberately disabled because a systemd service has no
+interactive terminal from which to read arrow keys. The resulting behaviour is:
+
+- with the OLED available, the dashboard runs continuously using GPIO buttons;
+- without the OLED, startup ends with a concise diagnostic in the journal;
+- `Restart=always` retries a failed startup after five seconds;
+- `raspilightgui-service stop` performs a deliberate stop and clears the OLED;
+- an unexpected crash is restarted after five seconds;
+- during a confirmed system shutdown, `Shutting down...` remains buffered on
+  the OLED instead of being replaced by another page.
+
+Inspect startup failures and runtime messages with:
+
+```bash
+raspilightgui-service status
+raspilightgui-service logs
+```
 
 A normally-open button cannot be reliably distinguished from an unconnected
 button in software: both appear as an inactive input held high by the configured
