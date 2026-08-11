@@ -147,6 +147,10 @@ The systemd unit uses `Restart=always` with a five-second delay, so an
 unexpected exit is restarted without creating a tight failure loop. A normal
 `raspilightgui-service stop` remains stopped.
 
+The installed service explicitly uses `--backend hardware`. If the OLED is
+missing, its journal contains a short `no SSD1306 connected` startup error and
+systemd retries after five seconds without emitting a Python traceback.
+
 ## Runtime efficiency
 
 - Buttons use GPIO edge callbacks through `gpiozero`/`lgpio`; there is no
@@ -176,21 +180,51 @@ For development without installing the systemd unit:
 
 ```bash
 sudo raspi-config nonint do_i2c 0
-sudo apt install python3-venv python3-gpiozero python3-lgpio
+sudo apt install i2c-tools python3-venv python3-gpiozero python3-lgpio
 python3 -m venv .venv --system-site-packages
 source .venv/bin/activate
 pip install -r requirements.txt
 GPIOZERO_PIN_FACTORY=lgpio python lightGUI.py
 ```
 
+### Console simulation
+
+The dashboard follows a Model/View/Presenter separation. The screen definitions
+and presenter do not depend on the OLED or GPIO implementation. It can therefore
+be exercised from an interactive terminal without connecting any hardware:
+
+```bash
+python lightGUI.py --backend console
+```
+
+Keyboard controls:
+
+- Left or Up: previous screen/item
+- Right or Down: next screen/item
+- Enter: OK
+- `q`: quit
+
+The default `--backend auto` first tries the OLED and GPIO buttons. If hardware
+initialization fails and stdin/stdout are attached to an interactive TTY, it
+prints the hardware error and automatically starts the console simulator. With
+no interactive TTY it exits cleanly instead. Use `--backend hardware` to disable
+fallback explicitly.
+
+A normally-open button cannot be reliably distinguished from an unconnected
+button in software: both appear as an inactive input held high by the configured
+pull-up resistor. The OLED, unlike the buttons, can be detected by its I²C
+acknowledgement.
+
 ## I²C troubleshooting
 
 At startup, the application scans the bus and accepts the two common SSD1306
 addresses, `0x3C` and `0x3D`. If startup reports that no SSD1306 was detected,
-stop the service and inspect bus 1:
+stop the service and inspect bus 1. `i2cdetect` is an optional diagnostic command
+provided by the Raspberry Pi OS package `i2c-tools`:
 
 ```bash
 raspilightgui-service stop
+sudo apt install i2c-tools
 ls -l /dev/i2c-1
 i2cdetect -y 1
 ```

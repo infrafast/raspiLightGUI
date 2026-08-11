@@ -1,16 +1,10 @@
-"""Extensible SSD1306 dashboard for Raspberry Pi 5."""
+"""Extensible SSD1306 dashboard presenter for Raspberry Pi 5."""
 
+import argparse
 from dataclasses import dataclass
-from queue import Empty, SimpleQueue
 import signal
-from threading import Event
 import time
 from typing import Callable
-
-import adafruit_ssd1306
-import board
-from gpiozero import Button
-from PIL import Image, ImageDraw, ImageFont
 
 from system_actions import (
     restart_assistant,
@@ -19,18 +13,10 @@ from system_actions import (
     shutdown_pi,
 )
 from system_info import monitor_content, service_content
+from ui_backends import create_backend
 
 
-WIDTH = 128
-HEIGHT = 64
-I2C_ADDRESS = 0x3C
-SUPPORTED_I2C_ADDRESSES = (0x3C, 0x3D)
 REFRESH_SECONDS = 10.0
-
-BUTTON_DOWN_GPIO = 5    # Down/Back, physical pin 29
-BUTTON_SELECT_GPIO = 6  # Select/OK, physical pin 31
-BUTTON_UP_GPIO = 13     # Up/Next, physical pin 33
-
 ContentProvider = Callable[[], list[str]]
 ActionCallback = Callable[[], str]
 
@@ -56,8 +42,7 @@ class ActionScreen:
     items: tuple[ActionItem, ...]
 
 
-# Add an InfoScreen or ActionScreen here to extend the carousel. Content and
-# actions are regular callables, so they may also import an external module.
+# Model: add screens and plug regular Python callables into this registry.
 SCREENS = (
     InfoScreen("MONITOR", monitor_content),
     InfoScreen("SERVICE STATE", service_content),
@@ -80,108 +65,33 @@ SCREENS = (
 )
 
 
-class Dashboard:
-    def __init__(self):
-        self.i2c = board.I2C()  # GPIO3/SCL (pin 5), GPIO2/SDA (pin 3)
-        address = self._detect_oled_address()
-        self.oled = adafruit_ssd1306.SSD1306_I2C(
-            WIDTH, HEIGHT, self.i2c, addr=address
-        )
-        self.events = SimpleQueue()
-        self.wake = Event()
-        self.stop_requested = False
-        self.shutdown_in_progress = False
-        self.button_down = self._make_button(BUTTON_DOWN_GPIO, "down")
-        self.button_select = self._make_button(BUTTON_SELECT_GPIO, "select")
-        self.button_up = self._make_button(BUTTON_UP_GPIO, "up")
-        self.buttons = (self.button_down, self.button_select, self.button_up)
+class DashboardPresenter:
+    """Hardware-independent navigation and action presentation."""
 
-        self.image = Image.new("1", (WIDTH, HEIGHT))
-        self.draw = ImageDraw.Draw(self.image)
-        self.font = ImageFont.load_default()
+    def __init__(self, view, input_device):
+        self.view = view
+        self.input = input_device
         self.screen_index = 0
         self.item_index = 0
         self.action_mode = False
         self.last_refresh = 0.0
-        self.last_frame = None
-
-    def _detect_oled_address(self) -> int:
-        """Find a common SSD1306 address and provide a useful startup error."""
-        deadline = time.monotonic() + 2.0
-        while not self.i2c.try_lock():
-            if time.monotonic() >= deadline:
-                raise RuntimeError("I2C bus is busy")
-            time.sleep(0.01)
-        try:
-            addresses = self.i2c.scan()
-        except OSError as error:
-            raise RuntimeError(f"I2C scan failed: {error}") from error
-        finally:
-            self.i2c.unlock()
-
-        if I2C_ADDRESS in addresses:
-            return I2C_ADDRESS
-        for address in SUPPORTED_I2C_ADDRESSES:
-            if address in addresses:
-                print(f"OLED detected at 0x{address:02X}")
-                return address
-        found = ", ".join(f"0x{address:02X}" for address in addresses) or "none"
-        raise RuntimeError(
-            f"SSD1306 not detected (expected 0x3C/0x3D; found: {found})"
-        )
-
-    def _make_button(self, gpio: int, event_name: str):
-        button = Button(gpio, pull_up=True, bounce_time=0.05)
-        button.when_pressed = lambda: self._push_event(event_name)
-        return button
-
-    def _push_event(self, event_name: str):
-        self.events.put(event_name)
-        self.wake.set()
-
-    def _next_event(self, timeout: float | None = None) -> str | None:
-        self.wake.clear()
-        try:
-            return self.events.get_nowait()
-        except Empty:
-            self.wake.wait(timeout)
-        try:
-            return self.events.get_nowait()
-        except Empty:
-            return None
-
-    def _discard_events(self):
-        while True:
-            try:
-                self.events.get_nowait()
-            except Empty:
-                return
+        self.stop_requested = False
+        self.shutdown_in_progress = False
 
     @property
     def screen(self):
         return SCREENS[self.screen_index]
 
     def display(self, title: str, lines: list[str], selected: int | None = None):
-        frame = (title, tuple(lines[:5]), selected)
-        if frame == self.last_frame:
-            self.last_refresh = time.monotonic()
-            return
-        self.draw.rectangle((0, 0, WIDTH, HEIGHT), fill=0)
-        self.draw.text((0, 0), title[:21], font=self.font, fill=255)
-        for index, text in enumerate(lines[:5]):
-            prefix = ">" if selected == index else " "
-            self.draw.text((0, 12 + index * 10), prefix, font=self.font, fill=255)
-            self.draw.text((8, 12 + index * 10), text[:20], font=self.font, fill=255)
-        self.oled.image(self.image)
-        self.oled.show()
-        self.last_frame = frame
+        self.view.display(title, lines, selected)
         self.last_refresh = time.monotonic()
 
     def render(self):
         if isinstance(self.screen, InfoScreen):
             try:
                 lines = self.screen.content()
-            except Exception as error:  # Keep the dashboard alive if a plugin fails.
+            except Exception as error:
+                print(f"Content provider failed: {error}")
                 lines = ["Content error", type(error).__name__]
             self.display(self.screen.title, lines)
         else:
@@ -194,7 +104,6 @@ class Dashboard:
     def move_screen(self, offset: int):
         self.screen_index = (self.screen_index + offset) % len(SCREENS)
         self.item_index = 0
-        # Enter action selection directly when an action page is reached.
         self.action_mode = isinstance(self.screen, ActionScreen)
         self.render()
 
@@ -203,18 +112,21 @@ class Dashboard:
         self.render()
 
     def confirm(self, label: str) -> bool:
-        choice = 0  # Cancel is deliberately the safe default.
-        while True:
+        choice = 0
+        while not self.stop_requested:
             self.display("CONFIRM", [label[:20], "Cancel", "Confirm"], choice + 1)
-            event = self._next_event()
+            event = self.input.next_event()
             if event in ("down", "up"):
                 choice = 1 - choice
             elif event == "select":
                 return choice == 1
+            elif event == "quit":
+                self.request_stop()
+        return False
 
     def run_action(self):
         item = self.screen.items[self.item_index]
-        if item.callback is None:  # Mandatory Exit item.
+        if item.callback is None:
             self.action_mode = False
             self.render()
             return
@@ -230,15 +142,14 @@ class Dashboard:
             print(f"Action failed: {error}")
             result = "Action failed"
         if item.terminal and result == "Shutdown requested":
-            # The host cannot report that it is fully off. Keep a meaningful
-            # message in the OLED buffer until the Pi removes power.
             self.display("SYSTEM", ["Shutting down...", "Please wait"])
             while True:
                 signal.pause()
         self.shutdown_in_progress = False
-        self.display("RESULT", [result[index:index + 20] for index in range(0, len(result), 20)])
+        lines = [result[index:index + 20] for index in range(0, len(result), 20)]
+        self.display("RESULT", lines)
         time.sleep(2)
-        self._discard_events()
+        self.input.discard_events()
         self.render()
 
     def run(self):
@@ -249,61 +160,67 @@ class Dashboard:
                 timeout = max(
                     0.0, REFRESH_SECONDS - (time.monotonic() - self.last_refresh)
                 )
-            event = self._next_event(timeout)
+            event = self.input.next_event(timeout)
             if self.stop_requested:
                 break
             if event == "down":
-                if self.action_mode:
-                    self.move_action(1)
-                else:
-                    self.move_screen(1)
+                self.move_action(1) if self.action_mode else self.move_screen(1)
             elif event == "up":
+                self.move_action(-1) if self.action_mode else self.move_screen(-1)
+            elif event == "select" and isinstance(self.screen, ActionScreen):
                 if self.action_mode:
-                    self.move_action(-1)
+                    self.run_action()
                 else:
-                    self.move_screen(-1)
-            elif event == "select":
-                if isinstance(self.screen, ActionScreen):
-                    if self.action_mode:
-                        self.run_action()
-                    else:
-                        self.action_mode = True
-                        self.render()
+                    self.action_mode = True
+                    self.render()
+            elif event == "quit":
+                self.request_stop()
             elif event is None and isinstance(self.screen, InfoScreen):
                 self.render()
 
     def request_stop(self):
         self.stop_requested = True
-        self.wake.set()
+        self.input.wake_up()
 
     def close(self):
-        self.oled.fill(0)
-        self.oled.show()
-        for button in self.buttons:
-            button.close()
-        self.i2c.deinit()
+        self.input.close()
+        self.view.close()
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--backend",
+        choices=("auto", "hardware", "console"),
+        default="auto",
+        help="I/O backend (default: auto with interactive console fallback)",
+    )
+    return parser.parse_args()
 
 
 def main():
-    dashboard = None
+    args = parse_args()
+    presenter = None
 
     def stop_service(_signum, _frame):
-        if dashboard is not None and dashboard.shutdown_in_progress:
+        if presenter is not None and presenter.shutdown_in_progress:
             raise SystemExit(0)
-        if dashboard is not None:
-            dashboard.request_stop()
+        if presenter is not None:
+            presenter.request_stop()
 
     signal.signal(signal.SIGTERM, stop_service)
     signal.signal(signal.SIGINT, stop_service)
     try:
-        dashboard = Dashboard()
-        dashboard.run()
+        view, input_device, backend = create_backend(args.backend)
+        print(f"Dashboard backend: {backend}")
+        presenter = DashboardPresenter(view, input_device)
+        presenter.run()
     except (OSError, RuntimeError) as error:
         print(f"Startup failed: {error}")
-        raise SystemExit(1) from error
+        raise SystemExit(1) from None
     finally:
-        if dashboard is not None and not dashboard.shutdown_in_progress:
-            dashboard.close()
+        if presenter is not None and not presenter.shutdown_in_progress:
+            presenter.close()
 
 
 if __name__ == "__main__":
