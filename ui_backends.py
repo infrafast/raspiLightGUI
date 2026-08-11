@@ -102,7 +102,7 @@ class OledView:
         for index, text in enumerate(lines[:5]):
             prefix = ">" if selected == index else " "
             text, body_font = self._fit_text(text, WIDTH - 8, self.body_fonts)
-            y = 12 + index * 10
+            y = 14 + index * 10
             self.draw.text((0, y), prefix, font=body_font, fill=255)
             self.draw.text((8, y), text, font=body_font, fill=255)
         self.oled.image(self.image)
