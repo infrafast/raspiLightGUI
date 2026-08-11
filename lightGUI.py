@@ -59,7 +59,7 @@ SCREENS = (
                 progress_message="Shutting down...",
                 terminal=True,
             ),
-            ActionItem("Exit"),
+            ActionItem("Back"),
         ),
     ),
 )

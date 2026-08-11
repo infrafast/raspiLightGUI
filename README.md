@@ -68,7 +68,7 @@ Refreshed every 10 seconds:
 - Restart QLC+ with its captured executable, arguments, working directory and
   environment
 - Shut down the Raspberry Pi
-- Exit action mode and return to screen navigation
+- Go back from action mode to screen navigation
 
 All system actions require confirmation. `Cancel` is selected by default. For a
 shutdown, the OLED displays `Shutting down...` before the poweroff request and
@@ -92,7 +92,7 @@ In action mode:
 
 - **Down** and **Up** select an item.
 - **OK** executes or confirms the selected item.
-- **Exit** returns to screen-navigation mode. Pressing **OK** on the inactive
+- **Back** returns to screen-navigation mode. Pressing **OK** on the inactive
   `SYSTEM` screen enters action mode again.
 
 ---
@@ -321,7 +321,7 @@ ActionScreen(
     "MY ACTIONS",
     (
         ActionItem("Do something", my_action_function, confirm=True),
-        ActionItem("Exit"),
+        ActionItem("Back"),
     ),
 )
 ```
@@ -329,4 +329,4 @@ ActionScreen(
 An information provider returns `list[str]`. An action returns a short status
 string. Providers are kept in `system_info.py`, actions in `system_actions.py`,
 and may call other Python modules or external programs. Every action screen must
-end with an `Exit` item whose callback is omitted.
+end with a `Back` item whose callback is omitted.
