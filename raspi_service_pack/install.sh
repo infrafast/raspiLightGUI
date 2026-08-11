@@ -116,6 +116,9 @@ commands = (
     "/usr/bin/systemctl enable --now raspilightgui.service",
     "/usr/bin/systemctl disable raspilightgui.service",
     "/usr/bin/systemctl restart livestageassistant.service",
+    "/usr/bin/systemctl stop livestageassistant.service",
+    "/usr/bin/systemctl restart oculizer.service",
+    "/usr/bin/systemctl stop oculizer.service",
     "/usr/bin/systemctl poweroff",
 )
 text = "Cmnd_Alias RASPILIGHTGUI_SERVICE = " + ", ".join(commands) + "\n"

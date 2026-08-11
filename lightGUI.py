@@ -11,6 +11,8 @@ from system_actions import (
     restart_oculizer,
     restart_qlcplus,
     shutdown_pi,
+    stop_assistant,
+    stop_oculizer,
 )
 from system_info import ScreenData, monitor_content, service_content
 from ui_backends import create_backend
@@ -52,7 +54,9 @@ SCREENS = (
         "SYSTEM",
         (
             ActionItem("Restart Assistant", restart_assistant, confirm=True),
+            ActionItem("Stop Assistant", stop_assistant, confirm=True),
             ActionItem("Restart Oculizer", restart_oculizer, confirm=True),
+            ActionItem("Stop Oculizer", stop_oculizer, confirm=True),
             ActionItem("Restart QLC+", restart_qlcplus, confirm=True),
             ActionItem(
                 "Shutdown",
@@ -63,7 +67,7 @@ SCREENS = (
             ),
             ActionItem("Back"),
         ),
-        default_index=3,
+        default_index=5,
     ),
 )
 
@@ -109,10 +113,16 @@ class DashboardPresenter:
             title = self.screen.title + (" /!\\" if alert else "")
             self.display(title, lines)
         else:
+            visible_count = 5
+            max_start = max(0, len(self.screen.items) - visible_count)
+            window_start = min(max(self.item_index - visible_count + 1, 0), max_start)
+            visible_items = self.screen.items[
+                window_start : window_start + visible_count
+            ]
             self.display(
                 self.screen.title,
-                [item.label for item in self.screen.items],
-                self.item_index if self.action_mode else None,
+                [item.label for item in visible_items],
+                self.item_index - window_start if self.action_mode else None,
             )
 
     def move_screen(self, offset: int):

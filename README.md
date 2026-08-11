@@ -70,7 +70,9 @@ currently running but unstable visible without adding another screen.
 ### SYSTEM
 
 - Restart Live Stage Assistant
+- Stop Live Stage Assistant
 - Restart Oculizer
+- Stop Oculizer
 - Restart QLC+ with its captured executable, arguments, working directory and
   environment
 - Shut down the Raspberry Pi
@@ -101,6 +103,8 @@ In action mode:
 - **Back** returns to screen-navigation mode. Pressing **OK** on the inactive
   `SYSTEM` screen enters action mode again.
 - `Shutdown` is selected by default whenever the `SYSTEM` action menu is entered.
+- Action menus longer than five items use a sliding five-line window that keeps
+  the selected item visible.
 
 ---
 
@@ -124,7 +128,8 @@ The installer:
 - adds the service account to the `gpio` and `i2c` groups;
 - installs `raspilightgui.service` and its lifecycle command;
 - installs narrowly scoped passwordless permissions for service control and
-  system shutdown, plus restarting `livestageassistant.service` from the OLED;
+  system shutdown, plus restarting/stopping the Assistant and Oculizer services
+  from the OLED;
 - leaves the current enabled/running state unchanged.
 
 Enable at boot and start immediately:
@@ -227,12 +232,15 @@ The dashboard user must own the running QLC+ process so that it can read and
 restart it. The installer creates the narrowly scoped shutdown and service
 control permissions automatically.
 
-The Live Stage Assistant wrapper calls `sudo systemctl restart`. Since the OLED
-service cannot enter an interactive password, the installer permits only this
-exact additional command for the configured service user:
+The Assistant and Oculizer wrappers call `sudo systemctl` for restart and stop.
+Since the OLED service cannot enter an interactive password, the installer
+permits only these exact additional commands for the configured service user:
 
 ```text
 /usr/bin/systemctl restart livestageassistant.service
+/usr/bin/systemctl stop livestageassistant.service
+/usr/bin/systemctl restart oculizer.service
+/usr/bin/systemctl stop oculizer.service
 ```
 
 This is not a general passwordless `sudo` permission. After upgrading an
@@ -242,6 +250,7 @@ rule:
 ```bash
 sudo ./raspi_service_pack/install.sh --service-user pi
 sudo -u pi sudo -n /usr/bin/systemctl restart livestageassistant.service
+sudo -u pi sudo -n /usr/bin/systemctl stop livestageassistant.service
 ```
 
 The second command is an optional verification: it must complete without asking
@@ -249,6 +258,7 @@ for a password. The equivalent interactive wrapper command will then work too:
 
 ```bash
 livestageassistant restart
+livestageassistant stop
 ```
 
 ## Manual development run
@@ -389,7 +399,8 @@ ActionScreen(
 )
 ```
 
-An information provider returns `list[str]`. An action returns a short status
-string. Providers are kept in `system_info.py`, actions in `system_actions.py`,
-and may call other Python modules or external programs. Every action screen must
-end with a `Back` item whose callback is omitted.
+An information provider returns `ScreenData` (or a simple `list[str]` when no
+alert flag is needed). An action returns a short status string. Providers are
+kept in `system_info.py`, actions in `system_actions.py`, and may call other
+Python modules or external programs. Every action screen must end with a `Back`
+item whose callback is omitted.
