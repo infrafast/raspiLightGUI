@@ -12,12 +12,13 @@ from system_actions import (
     restart_qlcplus,
     shutdown_pi,
 )
-from system_info import monitor_content, service_content
+from system_info import ScreenData, monitor_content, service_content
 from ui_backends import create_backend
 
 
 REFRESH_SECONDS = 10.0
-ContentProvider = Callable[[], list[str]]
+OLED_SLEEP_SECONDS = 300.0
+ContentProvider = Callable[[], ScreenData | list[str]]
 ActionCallback = Callable[[], str]
 
 
@@ -70,13 +71,16 @@ SCREENS = (
 class DashboardPresenter:
     """Hardware-independent navigation and action presentation."""
 
-    def __init__(self, view, input_device):
+    def __init__(self, view, input_device, sleep_seconds: float):
         self.view = view
         self.input = input_device
         self.screen_index = 0
         self.item_index = 0
         self.action_mode = False
         self.last_refresh = 0.0
+        self.last_activity = time.monotonic()
+        self.sleep_seconds = sleep_seconds
+        self.display_sleeping = False
         self.stop_requested = False
         self.shutdown_in_progress = False
 
@@ -91,11 +95,19 @@ class DashboardPresenter:
     def render(self):
         if isinstance(self.screen, InfoScreen):
             try:
-                lines = self.screen.content()
+                content = self.screen.content()
+                if isinstance(content, ScreenData):
+                    lines = content.lines
+                    alert = content.alert
+                else:
+                    lines = content
+                    alert = False
             except Exception as error:
                 print(f"Content provider failed: {error}")
                 lines = ["Content error", type(error).__name__]
-            self.display(self.screen.title, lines)
+                alert = True
+            title = self.screen.title + (" /!\\" if alert else "")
+            self.display(title, lines)
         else:
             self.display(
                 self.screen.title,
@@ -157,14 +169,27 @@ class DashboardPresenter:
     def run(self):
         self.render()
         while not self.stop_requested:
-            timeout = None
+            now = time.monotonic()
+            deadlines = []
             if isinstance(self.screen, InfoScreen):
-                timeout = max(
-                    0.0, REFRESH_SECONDS - (time.monotonic() - self.last_refresh)
-                )
+                deadlines.append(self.last_refresh + REFRESH_SECONDS)
+            if (
+                self.sleep_seconds > 0
+                and self.view.can_sleep
+                and not self.display_sleeping
+            ):
+                deadlines.append(self.last_activity + self.sleep_seconds)
+            timeout = max(0.0, min(deadlines) - now) if deadlines else None
             event = self.input.next_event(timeout)
             if self.stop_requested:
                 break
+            if event not in (None, "unknown"):
+                self.last_activity = time.monotonic()
+                if self.display_sleeping:
+                    self.view.wake()
+                    self.display_sleeping = False
+                    self.render()
+                    continue
             if event == "down":
                 self.move_action(1) if self.action_mode else self.move_screen(1)
             elif event == "up":
@@ -178,8 +203,20 @@ class DashboardPresenter:
                     self.render()
             elif event == "quit":
                 self.request_stop()
-            elif event is None and isinstance(self.screen, InfoScreen):
-                self.render()
+            elif event is None:
+                now = time.monotonic()
+                if (
+                    self.sleep_seconds > 0
+                    and self.view.can_sleep
+                    and not self.display_sleeping
+                    and now - self.last_activity >= self.sleep_seconds
+                ):
+                    self.display_sleeping = self.view.sleep()
+                if (
+                    isinstance(self.screen, InfoScreen)
+                    and now - self.last_refresh >= REFRESH_SECONDS
+                ):
+                    self.render()
 
     def request_stop(self):
         self.stop_requested = True
@@ -197,6 +234,13 @@ def parse_args():
         choices=("auto", "hardware", "console"),
         default="auto",
         help="I/O backend (default: auto with interactive console fallback)",
+    )
+    parser.add_argument(
+        "--sleep-timeout",
+        type=float,
+        default=OLED_SLEEP_SECONDS,
+        metavar="SECONDS",
+        help="OLED inactivity timeout; 0 disables sleep (default: 300)",
     )
     return parser.parse_args()
 
@@ -216,7 +260,7 @@ def main():
     try:
         view, input_device, backend = create_backend(args.backend)
         print(f"Dashboard backend: {backend}")
-        presenter = DashboardPresenter(view, input_device)
+        presenter = DashboardPresenter(view, input_device, max(0.0, args.sleep_timeout))
         presenter.run()
     except (OSError, RuntimeError) as error:
         print(f"Startup failed: {error}")

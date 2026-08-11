@@ -18,6 +18,8 @@ SUPPORTED_I2C_ADDRESSES = (0x3C, 0x3D)
 class OledView:
     """SSD1306 implementation of the dashboard view."""
 
+    can_sleep = True
+
     def __init__(self):
         import adafruit_ssd1306
         import board
@@ -32,6 +34,7 @@ class OledView:
         self.draw = ImageDraw.Draw(self.image)
         self.title_fonts, self.body_fonts = self._load_fonts(ImageFont)
         self.last_frame = None
+        self.sleeping = False
 
     @staticmethod
     def _load_fonts(image_font):
@@ -88,6 +91,8 @@ class OledView:
         )
 
     def display(self, title: str, lines: list[str], selected: int | None = None):
+        if self.sleeping:
+            return
         frame = (title, tuple(lines[:5]), selected)
         if frame == self.last_frame:
             return
@@ -104,7 +109,25 @@ class OledView:
         self.oled.show()
         self.last_frame = frame
 
+    def sleep(self) -> bool:
+        if not self.sleeping:
+            if hasattr(self.oled, "poweroff"):
+                self.oled.poweroff()
+            else:
+                self.oled.fill(0)
+                self.oled.show()
+            self.sleeping = True
+        return True
+
+    def wake(self):
+        if self.sleeping:
+            if hasattr(self.oled, "poweron"):
+                self.oled.poweron()
+            self.sleeping = False
+            self.last_frame = None
+
     def close(self):
+        self.wake()
         self.oled.fill(0)
         self.oled.show()
         self.i2c.deinit()
@@ -162,6 +185,8 @@ class GpioInput:
 class ConsoleView:
     """TTY representation with the same 21x6 logical display area."""
 
+    can_sleep = False
+
     def __init__(self):
         self.last_frame = None
 
@@ -192,6 +217,12 @@ class ConsoleView:
 
     def close(self):
         print("\033[0m", end="", flush=True)
+
+    def sleep(self) -> bool:
+        return False
+
+    def wake(self):
+        pass
 
 
 class KeyboardInput:

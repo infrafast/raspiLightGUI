@@ -62,6 +62,11 @@ Refreshed every 10 seconds:
   `DOWN`, or `UNKNOWN`
 - `qlcplus-qml` process state
 
+Assistant and Oculizer append `R:n` when systemd reports automatic restarts,
+for example `ASSISTANT: UP R:2`. Three or more restarts mark the page title with
+`!`, as does a `FAILED` state. This makes a service that is currently running but
+unstable visible without adding another screen.
+
 ### SYSTEM
 
 - Restart Live Stage Assistant
@@ -170,6 +175,15 @@ systemd retries after five seconds without emitting a Python traceback.
   width and is shortened with `...` only as a final fallback.
 - Action screens do not have a periodic refresh.
 - Button debounce is handled at the GPIO event layer with a 50 ms interval.
+- After five minutes without a button event, the physical OLED powers down. The
+  monitoring loop continues at its normal low frequency; the first button press
+  wakes and redraws the current page without triggering navigation or an action.
+  Console mode never sleeps.
+
+An information-page title receives a `/!\` suffix when that page has an alert:
+
+- `MONITOR /!\` for temperature `HIGH`/`CRIT` or power `LOW`/`CRIT`;
+- `SERVICE STATE /!\` for a failed service or at least three reported restarts.
 
 ### Pi 5 power state
 
@@ -258,6 +272,13 @@ After activating `.venv`, the application can be started in any of these modes:
 python lightGUI.py --backend auto
 python lightGUI.py --backend hardware
 python lightGUI.py --backend console
+```
+
+The OLED sleep timeout can be changed for a manual run, or disabled with zero:
+
+```bash
+python lightGUI.py --backend hardware --sleep-timeout 600
+python lightGUI.py --backend hardware --sleep-timeout 0
 ```
 
 | Mode | Behaviour |
