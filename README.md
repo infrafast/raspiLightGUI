@@ -4,7 +4,9 @@
 **Student**: Lennyn Alejandro Castillejo Robles<br>
 **Course**: Programmable Systems
 
-This project implements an interactive menu on an `SSD1306` OLED display using a Raspberry Pi 5 running Raspberry Pi OS and Python 3. The menu options are controlled using three physical buttons connected to GPIO pins.
+This project implements an extensible system dashboard on an `SSD1306` OLED
+display using a Raspberry Pi 5 running Raspberry Pi OS and Python 3. Three
+buttons navigate information pages and execute confirmed system actions.
 
 ---
 
@@ -41,14 +43,55 @@ of each button to its GPIO pin and connect their common side to physical GND pin
 
 ---
 
-## 🧠 Program Logic
+## Dashboard screens
 
-- A main menu with five options is displayed.
-- The display is redrawn only when the selected option changes, improving efficiency.
-- When selected, each option displays a different screen for two seconds.
-- If **"Exit"** is selected, the program ends.
+### MONITOR
 
-![image](https://gist.github.com/user-attachments/assets/4b8a4e09-c137-4204-a2e3-6b9fdac8f676)
+Refreshed every second:
+
+- CPU temperature and system uptime
+- CPU, RAM and root filesystem usage
+- IPv4 address of `eth0`
+
+### SERVICE STATE
+
+- Oculizer systemd state: `AUTO`, `MANUAL`, `DOWN`, or `UNKNOWN`
+- Live Stage Assistant systemd state: `UP`, `DOWN`, or `UNKNOWN`
+- `qlcplus-qml` process state
+
+### SYSTEM
+
+- Restart Live Stage Assistant
+- Restart Oculizer
+- Restart QLC+ with its captured executable, arguments, working directory and
+  environment
+- Shut down the Raspberry Pi
+- Exit action mode and return to screen navigation
+
+All system actions require confirmation. `Cancel` is selected by default. For a
+shutdown, the OLED displays `Shutting down...` before the poweroff request and
+keeps that message buffered while Raspberry Pi OS stops. The display becomes
+black when its power is removed; software running on the Pi cannot confirm a
+state reached after the Pi itself has powered off.
+
+After each non-terminal action, the OLED shows a short result such as
+`Assistant restarted`, `Oculizer failed`, or `QLC+ not running`. More detailed
+command errors are written to the console instead of overflowing the display.
+
+## Navigation
+
+In information-screen mode:
+
+- **Down / BACK** opens the next screen.
+- **Up / NEXT** opens the previous screen.
+- Reaching `SYSTEM` enters action mode automatically.
+
+In action mode:
+
+- **Down** and **Up** select an item.
+- **OK** executes or confirms the selected item.
+- **Exit** returns to screen-navigation mode. Pressing **OK** on the inactive
+  `SYSTEM` screen enters action mode again.
 
 ---
 
@@ -62,23 +105,38 @@ source .venv/bin/activate
 pip install -r requirements.txt
 python lightGUI.py
 ```
-## Results
-Temperature
 
-![image](https://gist.github.com/user-attachments/assets/0d36a9db-6470-45f6-b7be-c03e97d700be)
+The service-pack commands must be installed at:
 
-Date
+```text
+/usr/local/bin/livestageassistant
+/usr/local/bin/oculizer-service
+```
 
-![image](https://gist.github.com/user-attachments/assets/5aa0a30f-cd9f-49ff-a5ea-499c112b02c7)
+The dashboard user must own the running QLC+ process so that it can read and
+restart it. To allow shutdown without an interactive password, create a narrowly
+scoped sudoers rule with `sudo visudo -f /etc/sudoers.d/raspi-light-gui`:
 
-Time
-![image](https://gist.github.com/user-attachments/assets/904b9a69-393f-4eb7-9454-fac3ceabc26e)
+```sudoers
+pi ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff
+```
 
-Wind
+## Extending the dashboard
 
-![image](https://gist.github.com/user-attachments/assets/6ff67483-eab8-4bb0-8cce-a1a47e569c2a)
+The screen registry is the `SCREENS` tuple in `lightGUI.py`:
 
+```python
+InfoScreen("MY INFO", my_content_function)
+ActionScreen(
+    "MY ACTIONS",
+    (
+        ActionItem("Do something", my_action_function, confirm=True),
+        ActionItem("Exit"),
+    ),
+)
+```
 
-Exit
-
-![image](https://gist.github.com/user-attachments/assets/8bdcbab2-b74a-4162-bb02-280558c3259c)
+An information provider returns `list[str]`. An action returns a short status
+string. Providers are kept in `system_info.py`, actions in `system_actions.py`,
+and may call other Python modules or external programs. Every action screen must
+end with an `Exit` item whose callback is omitted.
