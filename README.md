@@ -47,7 +47,7 @@ of each button to its GPIO pin and connect their common side to physical GND pin
 
 ### MONITOR
 
-Refreshed every second:
+Refreshed every 10 seconds:
 
 - CPU temperature and system uptime
 - CPU, RAM and root filesystem usage
@@ -95,16 +95,69 @@ In action mode:
 
 ---
 
-## Installation and execution
+## Permanent service installation
+
+The service pack follows the same lifecycle pattern as Oculizer. Run the
+read-only preflight first, then install:
 
 ```bash
-sudo raspi-config nonint do_i2c 0
-sudo apt install python3-venv
-python3 -m venv .venv --system-site-packages
-source .venv/bin/activate
-pip install -r requirements.txt
-python lightGUI.py
+chmod +x raspi_service_pack/install.sh raspi_service_pack/raspilightgui-service
+./raspi_service_pack/install.sh --check --service-user pi
+sudo ./raspi_service_pack/install.sh --service-user pi
 ```
+
+The installer:
+
+- installs the Python, I²C, GPIO Zero and `lgpio` dependencies;
+- enables the Raspberry Pi I²C interface;
+- creates `.venv` and installs `requirements.txt`;
+- adds the service account to the `gpio` and `i2c` groups;
+- installs `raspilightgui.service` and its lifecycle command;
+- installs narrowly scoped passwordless permissions for service control and
+  system shutdown;
+- leaves the current enabled/running state unchanged.
+
+Enable at boot and start immediately:
+
+```bash
+raspilightgui-service auto
+```
+
+Lifecycle commands:
+
+```bash
+raspilightgui-service start
+raspilightgui-service stop
+raspilightgui-service restart
+raspilightgui-service status
+raspilightgui-service logs
+raspilightgui-service last-state
+raspilightgui-service health
+raspilightgui-service noauto
+```
+
+`noauto` disables boot startup without stopping a currently running instance.
+For a foreground diagnostic using the installed environment, run:
+
+```bash
+raspilightgui-service run-auto
+```
+
+The systemd unit uses `Restart=always` with a five-second delay, so an
+unexpected exit is restarted without creating a tight failure loop. A normal
+`raspilightgui-service stop` remains stopped.
+
+## Runtime efficiency
+
+- Buttons use GPIO edge callbacks through `gpiozero`/`lgpio`; there is no
+  continuous button-polling loop.
+- The main thread sleeps until a button event or the next information refresh.
+- Monitoring and service states are sampled every 10 seconds and only for the
+  information screen currently displayed.
+- The `eth0` address is cached and checked at most once per minute.
+- The OLED buffer is sent over I²C only when the rendered content has changed.
+- Action screens do not have a periodic refresh.
+- Button debounce is handled at the GPIO event layer with a 50 ms interval.
 
 The service-pack commands must be installed at:
 
@@ -114,11 +167,20 @@ The service-pack commands must be installed at:
 ```
 
 The dashboard user must own the running QLC+ process so that it can read and
-restart it. To allow shutdown without an interactive password, create a narrowly
-scoped sudoers rule with `sudo visudo -f /etc/sudoers.d/raspi-light-gui`:
+restart it. The installer creates the narrowly scoped shutdown and service
+control permissions automatically.
 
-```sudoers
-pi ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff
+## Manual development run
+
+For development without installing the systemd unit:
+
+```bash
+sudo raspi-config nonint do_i2c 0
+sudo apt install python3-venv python3-gpiozero python3-lgpio
+python3 -m venv .venv --system-site-packages
+source .venv/bin/activate
+pip install -r requirements.txt
+GPIOZERO_PIN_FACTORY=lgpio python lightGUI.py
 ```
 
 ## Extending the dashboard

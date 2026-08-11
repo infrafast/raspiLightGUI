@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE=raspilightgui.service
+REPO_ROOT=@REPO_ROOT@
+export GPIOZERO_PIN_FACTORY=lgpio
+
+run_systemctl() {
+  sudo -n /usr/bin/systemctl "$@" "$SERVICE"
+}
+
+case "${1:-}" in
+  start)
+    run_systemctl start
+    ;;
+  stop)
+    run_systemctl stop
+    ;;
+  restart)
+    run_systemctl restart
+    ;;
+  status)
+    /usr/bin/systemctl status "$SERVICE" --no-pager
+    ;;
+  logs)
+    /usr/bin/journalctl -u "$SERVICE" -f
+    ;;
+  run-auto)
+    if [[ -x $REPO_ROOT/.venv/bin/python && -r $REPO_ROOT/lightGUI.py ]]; then
+      cd "$REPO_ROOT"
+      exec "$REPO_ROOT/.venv/bin/python" "$REPO_ROOT/lightGUI.py"
+    fi
+    echo "raspilightgui-service: installed repository not found; run lightGUI.py from its repository" >&2
+    exit 1
+    ;;
+  auto)
+    sudo -n /usr/bin/systemctl enable --now "$SERVICE"
+    echo "raspiLightGUI auto-start enabled and service started."
+    ;;
+  noauto)
+    run_systemctl disable
+    echo "raspiLightGUI auto-start disabled; current process state unchanged."
+    ;;
+  last-state)
+    echo "Enabled: $(/usr/bin/systemctl is-enabled "$SERVICE" 2>/dev/null || true)"
+    echo "Active : $(/usr/bin/systemctl is-active "$SERVICE" 2>/dev/null || true)"
+    ;;
+  health)
+    if /usr/bin/systemctl is-active --quiet "$SERVICE"; then
+      echo "raspiLightGUI is healthy."
+    else
+      echo "raspiLightGUI is not running." >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "Usage: raspilightgui-service {start|stop|restart|status|logs|run-auto|auto|noauto|last-state|health}" >&2
+    exit 1
+    ;;
+esac

@@ -1,12 +1,15 @@
 """Extensible SSD1306 dashboard for Raspberry Pi 5."""
 
 from dataclasses import dataclass
+from queue import Empty, SimpleQueue
+import signal
+from threading import Event
 import time
 from typing import Callable
 
 import adafruit_ssd1306
 import board
-import digitalio
+from gpiozero import Button
 from PIL import Image, ImageDraw, ImageFont
 
 from system_actions import (
@@ -21,11 +24,11 @@ from system_info import monitor_content, service_content
 WIDTH = 128
 HEIGHT = 64
 I2C_ADDRESS = 0x3C
-REFRESH_SECONDS = 1.0
+REFRESH_SECONDS = 10.0
 
-BUTTON_DOWN_PIN = board.D5    # Down/Back, physical pin 29
-BUTTON_SELECT_PIN = board.D6  # Select/OK, physical pin 31
-BUTTON_UP_PIN = board.D13     # Up/Next, physical pin 33
+BUTTON_DOWN_GPIO = 5    # Down/Back, physical pin 29
+BUTTON_SELECT_GPIO = 6  # Select/OK, physical pin 31
+BUTTON_UP_GPIO = 13     # Up/Next, physical pin 33
 
 ContentProvider = Callable[[], list[str]]
 ActionCallback = Callable[[], str]
@@ -82,9 +85,13 @@ class Dashboard:
         self.oled = adafruit_ssd1306.SSD1306_I2C(
             WIDTH, HEIGHT, self.i2c, addr=I2C_ADDRESS
         )
-        self.button_down = self._make_button(BUTTON_DOWN_PIN)
-        self.button_select = self._make_button(BUTTON_SELECT_PIN)
-        self.button_up = self._make_button(BUTTON_UP_PIN)
+        self.events = SimpleQueue()
+        self.wake = Event()
+        self.stop_requested = False
+        self.shutdown_in_progress = False
+        self.button_down = self._make_button(BUTTON_DOWN_GPIO, "down")
+        self.button_select = self._make_button(BUTTON_SELECT_GPIO, "select")
+        self.button_up = self._make_button(BUTTON_UP_GPIO, "up")
         self.buttons = (self.button_down, self.button_select, self.button_up)
 
         self.image = Image.new("1", (WIDTH, HEIGHT))
@@ -94,19 +101,44 @@ class Dashboard:
         self.item_index = 0
         self.action_mode = False
         self.last_refresh = 0.0
+        self.last_frame = None
 
-    @staticmethod
-    def _make_button(pin):
-        button = digitalio.DigitalInOut(pin)
-        button.direction = digitalio.Direction.INPUT
-        button.pull = digitalio.Pull.UP
+    def _make_button(self, gpio: int, event_name: str):
+        button = Button(gpio, pull_up=True, bounce_time=0.05)
+        button.when_pressed = lambda: self._push_event(event_name)
         return button
+
+    def _push_event(self, event_name: str):
+        self.events.put(event_name)
+        self.wake.set()
+
+    def _next_event(self, timeout: float | None = None) -> str | None:
+        self.wake.clear()
+        try:
+            return self.events.get_nowait()
+        except Empty:
+            self.wake.wait(timeout)
+        try:
+            return self.events.get_nowait()
+        except Empty:
+            return None
+
+    def _discard_events(self):
+        while True:
+            try:
+                self.events.get_nowait()
+            except Empty:
+                return
 
     @property
     def screen(self):
         return SCREENS[self.screen_index]
 
     def display(self, title: str, lines: list[str], selected: int | None = None):
+        frame = (title, tuple(lines[:5]), selected)
+        if frame == self.last_frame:
+            self.last_refresh = time.monotonic()
+            return
         self.draw.rectangle((0, 0, WIDTH, HEIGHT), fill=0)
         self.draw.text((0, 0), title[:21], font=self.font, fill=255)
         for index, text in enumerate(lines[:5]):
@@ -115,6 +147,7 @@ class Dashboard:
             self.draw.text((8, 12 + index * 10), text[:20], font=self.font, fill=255)
         self.oled.image(self.image)
         self.oled.show()
+        self.last_frame = frame
         self.last_refresh = time.monotonic()
 
     def render(self):
@@ -131,12 +164,6 @@ class Dashboard:
                 self.item_index if self.action_mode else None,
             )
 
-    @staticmethod
-    def _wait_for_release(button):
-        while not button.value:
-            time.sleep(0.01)
-        time.sleep(0.03)
-
     def move_screen(self, offset: int):
         self.screen_index = (self.screen_index + offset) % len(SCREENS)
         self.item_index = 0
@@ -152,14 +179,11 @@ class Dashboard:
         choice = 0  # Cancel is deliberately the safe default.
         while True:
             self.display("CONFIRM", [label[:20], "Cancel", "Confirm"], choice + 1)
-            if not self.button_down.value or not self.button_up.value:
-                button = self.button_down if not self.button_down.value else self.button_up
-                self._wait_for_release(button)
+            event = self._next_event()
+            if event in ("down", "up"):
                 choice = 1 - choice
-            elif not self.button_select.value:
-                self._wait_for_release(self.button_select)
+            elif event == "select":
                 return choice == 1
-            time.sleep(0.02)
 
     def run_action(self):
         item = self.screen.items[self.item_index]
@@ -172,6 +196,7 @@ class Dashboard:
             return
 
         self.display("SYSTEM", [item.label, item.progress_message])
+        self.shutdown_in_progress = item.terminal
         try:
             result = item.callback()
         except Exception as error:
@@ -182,58 +207,72 @@ class Dashboard:
             # message in the OLED buffer until the Pi removes power.
             self.display("SYSTEM", ["Shutting down...", "Please wait"])
             while True:
-                time.sleep(1)
+                signal.pause()
+        self.shutdown_in_progress = False
         self.display("RESULT", [result[index:index + 20] for index in range(0, len(result), 20)])
         time.sleep(2)
+        self._discard_events()
         self.render()
 
     def run(self):
         self.render()
-        while True:
-            if not self.button_down.value:
-                self._wait_for_release(self.button_down)
+        while not self.stop_requested:
+            timeout = None
+            if isinstance(self.screen, InfoScreen):
+                timeout = max(
+                    0.0, REFRESH_SECONDS - (time.monotonic() - self.last_refresh)
+                )
+            event = self._next_event(timeout)
+            if self.stop_requested:
+                break
+            if event == "down":
                 if self.action_mode:
                     self.move_action(1)
                 else:
                     self.move_screen(1)
-            elif not self.button_up.value:
-                self._wait_for_release(self.button_up)
+            elif event == "up":
                 if self.action_mode:
                     self.move_action(-1)
                 else:
                     self.move_screen(-1)
-            elif not self.button_select.value:
-                self._wait_for_release(self.button_select)
+            elif event == "select":
                 if isinstance(self.screen, ActionScreen):
                     if self.action_mode:
                         self.run_action()
                     else:
                         self.action_mode = True
                         self.render()
-            elif (
-                isinstance(self.screen, InfoScreen)
-                and time.monotonic() - self.last_refresh >= REFRESH_SECONDS
-            ):
+            elif event is None and isinstance(self.screen, InfoScreen):
                 self.render()
-            time.sleep(0.02)
+
+    def request_stop(self):
+        self.stop_requested = True
+        self.wake.set()
 
     def close(self):
         self.oled.fill(0)
         self.oled.show()
         for button in self.buttons:
-            button.deinit()
+            button.close()
         self.i2c.deinit()
 
 
 def main():
     dashboard = None
+
+    def stop_service(_signum, _frame):
+        if dashboard is not None and dashboard.shutdown_in_progress:
+            raise SystemExit(0)
+        if dashboard is not None:
+            dashboard.request_stop()
+
+    signal.signal(signal.SIGTERM, stop_service)
+    signal.signal(signal.SIGINT, stop_service)
     try:
         dashboard = Dashboard()
         dashboard.run()
-    except KeyboardInterrupt:
-        pass
     finally:
-        if dashboard is not None:
+        if dashboard is not None and not dashboard.shutdown_in_progress:
             dashboard.close()
 
 

@@ -7,6 +7,11 @@ import time
 import psutil
 
 
+IP_REFRESH_SECONDS = 60.0
+_cached_ip = "DOWN"
+_last_ip_refresh = 0.0
+
+
 def _temperature() -> str:
     try:
         temperatures = psutil.sensors_temperatures()
@@ -30,11 +35,20 @@ def _uptime() -> str:
 
 
 def _interface_ip(interface: str = "eth0") -> str:
+    global _cached_ip, _last_ip_refresh
+
+    now = time.monotonic()
+    if now - _last_ip_refresh < IP_REFRESH_SECONDS:
+        return _cached_ip
     addresses = psutil.net_if_addrs().get(interface, [])
     for address in addresses:
         if address.family == socket.AF_INET:
-            return address.address
-    return "DOWN"
+            _cached_ip = address.address
+            break
+    else:
+        _cached_ip = "DOWN"
+    _last_ip_refresh = now
+    return _cached_ip
 
 
 def monitor_content() -> list[str]:

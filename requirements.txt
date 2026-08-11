@@ -1,4 +1,5 @@
 Adafruit-Blinka
 adafruit-circuitpython-ssd1306
+gpiozero
 Pillow
 psutil
