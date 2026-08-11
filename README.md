@@ -62,10 +62,10 @@ Refreshed every 10 seconds:
   `DOWN`, or `UNKNOWN`
 - `qlcplus-qml` process state
 
-Assistant and Oculizer append `R:n` when systemd reports automatic restarts,
-for example `ASSISTANT: UP R:2`. Three or more restarts mark the page title with
-`!`, as does a `FAILED` state. This makes a service that is currently running but
-unstable visible without adding another screen.
+Assistant and Oculizer append `R:n` only when systemd reports more than one
+automatic restart, for example `ASSISTANT: UP R:2`. Three or more restarts mark
+the page title with `/!\`, as does a `FAILED` state. This makes a service that is
+currently running but unstable visible without adding another screen.
 
 ### SYSTEM
 

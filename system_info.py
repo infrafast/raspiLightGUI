@@ -201,7 +201,7 @@ def _oculizer_info() -> tuple[str, int]:
 
 
 def _service_line(label: str, state: str, restarts: int) -> str:
-    suffix = f" R:{restarts}" if restarts else ""
+    suffix = f" R:{restarts}" if restarts > 1 else ""
     return f"{label}: {state}{suffix}"
 
 
