@@ -67,7 +67,7 @@ SCREENS = (
             ),
             ActionItem("Back"),
         ),
-        default_index=5,
+        default_index=6,
     ),
 )
 

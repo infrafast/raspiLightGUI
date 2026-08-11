@@ -102,7 +102,8 @@ In action mode:
 - **OK** executes or confirms the selected item.
 - **Back** returns to screen-navigation mode. Pressing **OK** on the inactive
   `SYSTEM` screen enters action mode again.
-- `Shutdown` is selected by default whenever the `SYSTEM` action menu is entered.
+- `Back` is selected by default whenever the `SYSTEM` action menu is entered, so
+  the initial selection is non-destructive.
 - Action menus longer than five items use a sliding five-line window that keeps
   the selected item visible.
 
