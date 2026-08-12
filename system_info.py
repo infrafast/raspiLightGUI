@@ -185,13 +185,14 @@ def _process_status(command: list[str]) -> str:
     return "UP" if result.returncode == 0 else "DOWN"
 
 
-def _oculizer_info() -> tuple[str, int]:
-    active, restarts = _systemd_info("oculizer.service")
+def _managed_service_info(service: str) -> tuple[str, int]:
+    """Return runtime/boot mode and restart count for a systemd service."""
+    active, restarts = _systemd_info(service)
     if active != "UP":
         return active, restarts
     try:
         enabled = subprocess.run(
-            ["systemctl", "is-enabled", "--quiet", "oculizer.service"],
+            ["systemctl", "is-enabled", "--quiet", service],
             timeout=3,
             check=False,
         )
@@ -207,8 +208,10 @@ def _service_line(label: str, state: str, restarts: int) -> str:
 
 def service_content() -> ScreenData:
     """Return current systemd/process states without invoking a shell."""
-    oculizer_state, oculizer_restarts = _oculizer_info()
-    assistant_state, assistant_restarts = _systemd_info(
+    oculizer_state, oculizer_restarts = _managed_service_info(
+        "oculizer.service"
+    )
+    assistant_state, assistant_restarts = _managed_service_info(
         "livestageassistant.service"
     )
     alert = (

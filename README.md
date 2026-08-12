@@ -58,14 +58,16 @@ Refreshed every 10 seconds:
 
 - Oculizer systemd state: `AUTO`, `MANUAL`, `STARTING`, `STOPPING`, `FAILED`,
   `DOWN`, or `UNKNOWN`
-- Live Stage Assistant systemd state: `UP`, `STARTING`, `STOPPING`, `FAILED`,
-  `DOWN`, or `UNKNOWN`
+- Live Stage Assistant systemd state: `AUTO`, `MANUAL`, `STARTING`, `STOPPING`,
+  `FAILED`, `DOWN`, or `UNKNOWN`
 - `qlcplus-qml` process state
 
-Assistant and Oculizer append `R:n` only when systemd reports more than one
-automatic restart, for example `ASSISTANT: UP R:2`. Three or more restarts mark
-the page title with `/!\`, as does a `FAILED` state. This makes a service that is
-currently running but unstable visible without adding another screen.
+For both services, `AUTO` means active and enabled at boot; `MANUAL` means active
+but disabled at boot. Assistant and Oculizer append `R:n` only when systemd
+reports more than one automatic restart, for example `ASSISTANT: AUTO R:2`.
+Three or more restarts mark the page title with `/!\`, as does a `FAILED` state.
+This makes a service that is currently running but unstable visible without
+adding another screen.
 
 ### SYSTEM
 
