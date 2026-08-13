@@ -52,7 +52,7 @@ Refreshed every 10 seconds:
 - CPU temperature, Pi 5 input voltage and power state
 - System uptime
 - CPU, RAM and root filesystem usage
-- IPv4 address of `eth0`
+- IPv4 address of the active wired interface (`eth0`, `end0`, or another `en*`)
 
 ### SERVICE STATE
 
@@ -176,7 +176,9 @@ systemd retries after five seconds without emitting a Python traceback.
 - The main thread sleeps until a button event or the next information refresh.
 - Monitoring and service states are sampled every 10 seconds and only for the
   information screen currently displayed.
-- The `eth0` address is cached and checked at most once per minute.
+- A valid wired IPv4 address is cached for one minute. An unavailable address is
+  retried every 10 seconds so networking that comes up after boot appears
+  promptly. The first lookup is always immediate.
 - The OLED buffer is sent over I²C only when the rendered content has changed.
 - OLED text uses proportional DejaVu Sans Condensed when available. Each title
   and body line selects the largest configured size that fits its measured pixel
