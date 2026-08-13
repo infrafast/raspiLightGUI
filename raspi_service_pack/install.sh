@@ -208,8 +208,10 @@ commands = (
     "/usr/bin/systemctl enable --now raspilightgui.service",
     "/usr/bin/systemctl disable raspilightgui.service",
     "/usr/bin/systemctl restart livestageassistant.service",
+    "/usr/bin/systemctl start livestageassistant.service",
     "/usr/bin/systemctl stop livestageassistant.service",
     "/usr/bin/systemctl restart oculizer.service",
+    "/usr/bin/systemctl start oculizer.service",
     "/usr/bin/systemctl stop oculizer.service",
     "/usr/bin/systemctl poweroff",
 )

@@ -116,6 +116,15 @@ callback rather than embedding system calls in rendering code.
 - Oculizer and Live Stage Assistant share the same systemd state algorithm:
   running and enabled is `AUTO`; running and disabled is `MANUAL`; transitional,
   inactive, failed, and unreadable states remain distinct.
+- `SERVICE STATE` and `SYSTEM` must consume the same managed-service snapshot,
+  cached for at most 10 seconds. Refresh it when stale on entry to `SYSTEM`, and
+  invalidate it after an executed action.
+- Build managed-service actions dynamically: `AUTO`, `MANUAL`, and `STARTING`
+  expose Stop then Restart; `DOWN`, `FAILED`, and `STOPPING` expose Start;
+  `UNKNOWN` exposes no action. QLC+, Shutdown, and Back remain fixed actions.
+- Freeze the generated item tuple while action mode is active so asynchronous
+  service transitions never move an item under the cursor. Rebuild it after an
+  executed action and select `Back` again.
 - Show `R:n` only when the restart count is greater than one. A failed service
   or at least three restarts adds `/!\` to the screen title.
 - Network and process snapshots may be reused by the OLED for up to 10 seconds.

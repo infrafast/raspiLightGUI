@@ -35,6 +35,14 @@ def restart_assistant() -> str:
     )
 
 
+def start_assistant() -> str:
+    return _run(
+        ["/usr/local/bin/livestageassistant", "start"],
+        "Assistant started",
+        "Assistant start error",
+    )
+
+
 def stop_assistant() -> str:
     return _run(
         ["/usr/local/bin/livestageassistant", "stop"],
@@ -48,6 +56,14 @@ def restart_oculizer() -> str:
         ["/usr/local/bin/oculizer-service", "restart"],
         "Oculizer restarted",
         "Oculizer failed",
+    )
+
+
+def start_oculizer() -> str:
+    return _run(
+        ["/usr/local/bin/oculizer-service", "start"],
+        "Oculizer started",
+        "Oculizer start error",
     )
 
 

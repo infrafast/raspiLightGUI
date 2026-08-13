@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import subprocess
+from threading import Lock
 import time
 import re
 
@@ -17,6 +18,13 @@ POWER_CRITICAL_VOLTS = 4.65
 TEMP_HIGH_C = 70.0
 TEMP_CRITICAL_C = 80.0
 SERVICE_RESTART_ALERT = 3
+SERVICE_STATE_MAX_AGE = 10.0
+MANAGED_SERVICES = {
+    "OCULIZER": "oculizer.service",
+    "ASSISTANT": "livestageassistant.service",
+}
+_service_state_lock = Lock()
+_service_state_snapshot: tuple[float, dict[str, tuple[str, int]]] | None = None
 
 
 @dataclass(frozen=True)
@@ -184,6 +192,36 @@ def _managed_service_info(service: str) -> tuple[str, int]:
     return ("AUTO" if enabled.returncode == 0 else "MANUAL"), restarts
 
 
+def managed_service_states(
+    max_age: float = SERVICE_STATE_MAX_AGE,
+) -> dict[str, tuple[str, int]]:
+    """Return one shared, bounded-age snapshot of all managed services."""
+    global _service_state_snapshot
+
+    with _service_state_lock:
+        now = time.monotonic()
+        if (
+            max_age > 0
+            and _service_state_snapshot is not None
+            and now - _service_state_snapshot[0] <= max_age
+        ):
+            return dict(_service_state_snapshot[1])
+        states = {
+            label: _managed_service_info(unit)
+            for label, unit in MANAGED_SERVICES.items()
+        }
+        _service_state_snapshot = (now, states)
+        return dict(states)
+
+
+def invalidate_service_states():
+    """Force the next service consumer to obtain a fresh snapshot."""
+    global _service_state_snapshot
+
+    with _service_state_lock:
+        _service_state_snapshot = None
+
+
 def _service_line(label: str, state: str, restarts: int) -> str:
     suffix = f" R:{restarts}" if restarts > 1 else ""
     return f"{label}: {state}{suffix}"
@@ -191,12 +229,9 @@ def _service_line(label: str, state: str, restarts: int) -> str:
 
 def service_content() -> ScreenData:
     """Return current systemd/process states without invoking a shell."""
-    oculizer_state, oculizer_restarts = _managed_service_info(
-        "oculizer.service"
-    )
-    assistant_state, assistant_restarts = _managed_service_info(
-        "livestageassistant.service"
-    )
+    states = managed_service_states()
+    oculizer_state, oculizer_restarts = states["OCULIZER"]
+    assistant_state, assistant_restarts = states["ASSISTANT"]
     alert = (
         oculizer_state == "FAILED"
         or assistant_state == "FAILED"

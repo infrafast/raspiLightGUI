@@ -12,10 +12,18 @@ from system_actions import (
     restart_oculizer,
     restart_qlcplus,
     shutdown_pi,
+    start_assistant,
+    start_oculizer,
     stop_assistant,
     stop_oculizer,
 )
-from system_info import ScreenData, monitor_content, service_content
+from system_info import (
+    ScreenData,
+    invalidate_service_states,
+    managed_service_states,
+    monitor_content,
+    service_content,
+)
 from status_led import StatusLedController
 from ui_backends import create_backend
 
@@ -44,21 +52,41 @@ class ActionItem:
 @dataclass(frozen=True)
 class ActionScreen:
     title: str
-    items: tuple[ActionItem, ...]
-    default_index: int = 0
+    items: Callable[[], tuple[ActionItem, ...]]
 
 
-# Model: add screens and plug regular Python callables into this registry.
-SCREENS = (
-    InfoScreen("MONITOR", monitor_content),
-    InfoScreen("SERVICE STATE", service_content),
-    ActionScreen(
-        "SYSTEM",
+def system_action_items() -> tuple[ActionItem, ...]:
+    """Build safe actions from the service-state snapshot shared with the UI."""
+    states = managed_service_states()
+    items: list[ActionItem] = []
+    services = (
         (
-            ActionItem("Restart Assistant", restart_assistant, confirm=True),
-            ActionItem("Stop Assistant", stop_assistant, confirm=True),
-            ActionItem("Restart Oculizer", restart_oculizer, confirm=True),
-            ActionItem("Stop Oculizer", stop_oculizer, confirm=True),
+            "Assistant",
+            states["ASSISTANT"][0],
+            start_assistant,
+            stop_assistant,
+            restart_assistant,
+        ),
+        (
+            "Oculizer",
+            states["OCULIZER"][0],
+            start_oculizer,
+            stop_oculizer,
+            restart_oculizer,
+        ),
+    )
+    for label, state, start, stop, restart in services:
+        if state in ("AUTO", "MANUAL", "STARTING"):
+            items.extend(
+                (
+                    ActionItem(f"Stop {label}", stop, confirm=True),
+                    ActionItem(f"Restart {label}", restart, confirm=True),
+                )
+            )
+        elif state in ("DOWN", "FAILED", "STOPPING"):
+            items.append(ActionItem(f"Start {label}", start, confirm=True))
+    items.extend(
+        (
             ActionItem("Restart QLC+", restart_qlcplus, confirm=True),
             ActionItem(
                 "Shutdown",
@@ -68,8 +96,18 @@ SCREENS = (
                 terminal=True,
             ),
             ActionItem("Back"),
-        ),
-        default_index=6,
+        )
+    )
+    return tuple(items)
+
+
+# Model: add screens and plug regular Python callables into this registry.
+SCREENS = (
+    InfoScreen("MONITOR", monitor_content),
+    InfoScreen("SERVICE STATE", service_content),
+    ActionScreen(
+        "SYSTEM",
+        system_action_items,
     ),
 )
 
@@ -83,6 +121,7 @@ class DashboardPresenter:
         self.screen_index = 0
         self.item_index = 0
         self.action_mode = False
+        self.action_items: tuple[ActionItem, ...] = ()
         self.last_refresh = 0.0
         self.last_activity = time.monotonic()
         self.sleep_seconds = sleep_seconds
@@ -120,18 +159,19 @@ class DashboardPresenter:
             title = self.screen.title + (" /!\\" if alert else "")
             self.display(title, lines)
         else:
+            if not self.action_items:
+                self.refresh_action_items()
             visible_count = 5
-            display_index = (
-                self.item_index if self.action_mode else self.screen.default_index
-            )
-            max_start = max(0, len(self.screen.items) - visible_count)
+            default_index = len(self.action_items) - 1
+            display_index = self.item_index if self.action_mode else default_index
+            max_start = max(0, len(self.action_items) - visible_count)
             window_start = min(max(display_index - visible_count + 1, 0), max_start)
-            visible_items = self.screen.items[
+            visible_items = self.action_items[
                 window_start : window_start + visible_count
             ]
             labels = [item.label for item in visible_items]
             if not self.action_mode:
-                default_visible_index = self.screen.default_index - window_start
+                default_visible_index = default_index - window_start
                 if 0 <= default_visible_index < len(labels):
                     labels[default_visible_index] = "OK = enter menu"
             self.display(
@@ -143,13 +183,21 @@ class DashboardPresenter:
     def move_screen(self, offset: int):
         self.screen_index = (self.screen_index + offset) % len(SCREENS)
         self.action_mode = False
-        self.item_index = (
-            self.screen.default_index if isinstance(self.screen, ActionScreen) else 0
-        )
+        if isinstance(self.screen, ActionScreen):
+            self.refresh_action_items()
+        else:
+            self.action_items = ()
+            self.item_index = 0
         self.render()
 
+    def refresh_action_items(self, force: bool = False):
+        if force:
+            invalidate_service_states()
+        self.action_items = self.screen.items()
+        self.item_index = len(self.action_items) - 1
+
     def move_action(self, offset: int):
-        self.item_index = (self.item_index + offset) % len(self.screen.items)
+        self.item_index = (self.item_index + offset) % len(self.action_items)
         self.render()
 
     def confirm(self, label: str) -> bool:
@@ -166,7 +214,7 @@ class DashboardPresenter:
         return False
 
     def run_action(self):
-        item = self.screen.items[self.item_index]
+        item = self.action_items[self.item_index]
         if item.callback is None:
             self.action_mode = False
             self.render()
@@ -191,6 +239,7 @@ class DashboardPresenter:
         self.display("RESULT", lines)
         time.sleep(2)
         self.input.discard_events()
+        self.refresh_action_items(force=True)
         self.render()
 
     def run(self):
@@ -229,7 +278,7 @@ class DashboardPresenter:
                     self.run_action()
                 else:
                     self.action_mode = True
-                    self.item_index = self.screen.default_index
+                    self.item_index = len(self.action_items) - 1
                     self.render()
             elif event == "quit":
                 self.request_stop()

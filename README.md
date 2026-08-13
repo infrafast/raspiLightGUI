@@ -56,14 +56,17 @@ a failed service, repeated restarts, critical temperature, or critical power.
 
 The action page can:
 
-- restart or stop Live Stage Assistant;
-- restart or stop Oculizer;
+- stop or restart a running/starting Live Stage Assistant or Oculizer service;
+- start either service when it is stopped, failed, or stopping;
 - restart QLC+;
 - shut down the Raspberry Pi safely;
 - return to the screen list with `Back`.
 
 Actions require confirmation and display a short success or failure message.
 `Back` and confirmation cancellation are selected by default.
+Services whose state is unavailable are omitted from the action list. The menu
+is updated from the same service states shown on `SERVICE STATE`, but remains
+stable while you are selecting an item.
 
 ## RGB status LED
 
