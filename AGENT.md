@@ -67,10 +67,11 @@
   declarations, wrapper paths, and primary LED service, without rewriting the
   monitoring or menu algorithms.
 - Declare dependencies by service key in `ServiceDefinition.depends_on`. Before
-  a Start action, obtain a fresh shared snapshot and require every dependency to
-  have runtime `UP`. On failure, do not call the wrapper; return the OLED-safe
-  message `Start <dependency label> first`. The included profile declares that
-  Oculizer depends on QLC+.
+  Start and Restart actions, obtain a fresh shared snapshot and require every
+  dependency to have runtime `UP`. On failure, do not call the wrapper; return
+  the OLED-safe message `Start <dependency label> first`. This pre-check ensures
+  a blocked Restart cannot stop an already running service. The included profile
+  declares that Oculizer depends on QLC+.
 - In `README.md`, clearly distinguish generic control-panel behaviour from examples
   produced by the included rack profile. Do not present the example services as
   mandatory architectural components.

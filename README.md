@@ -39,8 +39,8 @@ PRIMARY_SERVICE_KEY = "QLC+"
 ```
 
 The optional final tuple declares service dependencies. In this profile,
-Oculizer requires QLC+. Trying to start Oculizer while QLC+ is not running
-displays `Start QLC+ first` and does not issue the start command.
+Oculizer requires QLC+. Trying to start or restart Oculizer while QLC+ is not
+running displays `Start QLC+ first` and does not issue the command.
 
 ## What the display shows
 

@@ -27,7 +27,7 @@ def _run(
 
 def run_service_action(service: ServiceDefinition, action: str) -> str:
     """Run a declared service wrapper and return a compact semantic result."""
-    if action == "start" and service.depends_on:
+    if action in ("start", "restart") and service.depends_on:
         # Import lazily to keep service declarations independent from probes.
         from system_info import managed_service_states
 
