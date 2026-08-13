@@ -178,9 +178,3 @@ git diff --check
 Do not leave generated `__pycache__` or `.pyc` changes in the worktree. Hardware
 changes also require Raspberry Pi validation of GPIO ownership, button events,
 OLED layout, I2C fallback, LED colours/cadence, signals, and systemd restart.
-
-## Rollback reference
-
-The annotated tag `rollback-pre-led-integration-20260813` identifies the clean
-state before OLED and raspiLed functionality were integrated. Preserve it until
-the user explicitly approves removal.
