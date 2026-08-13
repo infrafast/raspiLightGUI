@@ -119,9 +119,10 @@ per-service callbacks or rendering branches.
   `...` continuation hint, and `OK = enter menu`, without a selection cursor.
   The hint must remain generic and must not duplicate action labels. Up/Down
   changes screens in this state.
-- OK explicitly activates an action screen's item list. `Back` is its default
-  selected item, and action mode remains active until the user selects and
-  confirms `Back`. Confirmation dialogs default to `Cancel`.
+- OK explicitly activates an action screen's item list. Select the first item
+  whenever a root menu or submenu opens or is rebuilt. Action mode remains
+  active until the user selects and confirms `Back`. Confirmation dialogs still
+  default to `Cancel`.
 
 ### Monitoring
 
@@ -151,7 +152,7 @@ per-service callbacks or rendering branches.
   masked/static units) exposes no service action.
 - Freeze each generated menu while the user selects an item. After an executed
   action, invalidate the shared snapshot, rebuild the current submenu, and
-  select its Back item. Back returns one menu level or exits root action mode.
+  select its first item. Back returns one menu level or exits root action mode.
 - Show `R:n` only when the restart count is greater than one. A failed service
   or at least three restarts adds `/!\` to the screen title.
 - Network and managed-service snapshots may be reused for up to 10 seconds.

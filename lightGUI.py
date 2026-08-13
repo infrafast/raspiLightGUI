@@ -205,7 +205,7 @@ class DashboardPresenter:
                 self.display(title, list(action_menu.preview_lines))
                 return
             visible_count = 5
-            default_index = len(action_menu.items) - 1
+            default_index = 0
             display_index = self.item_index if self.action_mode else default_index
             max_start = max(0, len(action_menu.items) - visible_count)
             window_start = min(max(display_index - visible_count + 1, 0), max_start)
@@ -238,7 +238,7 @@ class DashboardPresenter:
         if self.menu_provider is None:
             self.menu_provider = self.screen.menu
         self.action_menu = self.menu_provider()
-        self.item_index = len(self.action_menu.items) - 1
+        self.item_index = 0
 
     def move_action(self, offset: int):
         self.item_index = (self.item_index + offset) % len(self.action_menu.items)
@@ -338,7 +338,7 @@ class DashboardPresenter:
                     self.run_action()
                 else:
                     self.action_mode = True
-                    self.item_index = len(self.action_menu.items) - 1
+                    self.item_index = 0
                     self.render()
             elif event == "quit":
                 self.request_stop()
