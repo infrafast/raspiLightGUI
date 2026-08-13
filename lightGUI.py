@@ -131,7 +131,7 @@ def system_action_menu() -> ActionMenu:
     return ActionMenu(
         "SYSTEM",
         tuple(items),
-        tuple(service_data.lines + ["Reboot / Shutdown", "OK = enter menu"]),
+        tuple(service_data.lines + ["...", "OK = enter menu"]),
         service_data.alert,
     )
 

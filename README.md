@@ -1,13 +1,41 @@
-# Raspberry Pi OLED Dashboard and RGB Status LED
+# Raspberry Pi OLED Control Panel and RGB Status LED
 
-raspiLightGUI is a lightweight Raspberry Pi 5 dashboard and controller. It
-combines:
+raspiLightGUI is a lightweight and adaptable Raspberry Pi 5 control panel for an
+embedded system or equipment rack. It combines:
 
 - a 128x64 SSD1306 OLED display and three navigation buttons;
-- an RGB status LED for Ethernet and QLC+;
-- system health and service monitoring;
+- an RGB status LED for Ethernet and one primary service;
+- system health and configurable systemd-service monitoring;
 - confirmed restart, stop, and shutdown actions;
 - one continuously supervised systemd service.
+
+## Included rack profile
+
+The application is supplied preconfigured for a live-production rack running:
+
+- QLC+ for lighting control;
+- Oculizer as a mixing agent;
+- Live Stage Assistant as an assistant service.
+
+Services and their display order are configured in `managed_services.py`:
+
+```python
+MANAGED_SERVICES = (
+    ServiceDefinition(
+        "QLC+", "QLC+", "qlcplus.service", "/usr/local/bin/qlcplus-service"
+    ),
+    ServiceDefinition(
+        "OCULIZER", "Oculizer", "oculizer.service",
+        "/usr/local/bin/oculizer-service",
+    ),
+    ServiceDefinition(
+        "ASSISTANT", "Assistant", "livestageassistant.service",
+        "/usr/local/bin/livestageassistant",
+    ),
+)
+
+PRIMARY_SERVICE_KEY = "QLC+"
+```
 
 ## What the display shows
 
@@ -36,16 +64,15 @@ Power states:
 
 ### SYSTEM
 
-When inactive, the page shows `qlcplus.service`, `oculizer.service`, and
-`livestageassistant.service`, in that order. It refreshes when opened and every
-10 seconds:
+When inactive, the page shows the configured services. With the included rack
+profile, it refreshes when opened and every 10 seconds as follows:
 
 ```text
 SYSTEM
 QLC+: AUTO
 OCULIZER: DOWN
 ASSISTANT: FAILED
-Reboot / Shutdown
+...
 OK = enter menu
 ```
 
@@ -65,9 +92,9 @@ state, for example `DOWN AUTO` or `FAILED AUTO`.
 `R:n` appears after more than one service restart. `/!\` in the title indicates
 a failed service, repeated restarts, critical temperature, or critical power.
 
-Pressing OK activates the menu. It contains one selectable entry per service,
-followed by `Reboot`, `Shutdown`, and `Back`. Selecting QLC+, Oculizer, or
-Assistant opens a contextual submenu that can:
+Pressing OK activates the menu. It contains one selectable entry per configured
+service, followed by `Reboot`, `Shutdown`, and `Back`. Selecting a service opens
+a contextual submenu that can:
 
 - stop or restart the service when it is running or starting;
 - start it when it is stopped, failed, or stopping;
@@ -93,11 +120,12 @@ heartbeat:
 | Ethernet | Link and IPv4 address | Solid blue, appearing magenta with red |
 | Ethernet | Link without IPv4 | Blinking blue/magenta |
 | Ethernet | No link | Blue off; red only |
-| QLC+ | Service running | Solid green, appearing yellow with red |
-| QLC+ | Service not running | Blinking green/yellow |
+| Primary service | Running | Solid green, appearing yellow with red |
+| Primary service | Not running | Blinking green/yellow |
 
-Each Ethernet and QLC+ phase lasts about 1.5 seconds. Blink states alternate
-every 250 ms. The LED continues working when the OLED is disconnected or asleep.
+Each Ethernet and primary-service phase lasts about 1.5 seconds. Blink states
+alternate every 250 ms. In the included rack profile, the primary service is
+QLC+. The LED continues working when the OLED is disconnected or asleep.
 
 ## Wiring
 
@@ -160,10 +188,11 @@ it without navigating or executing an action.
 
 ## Installation
 
-Install and configure the managed applications before raspiLightGUI. In
-particular, QLC+ must be provided as `qlcplus.service` with the
-`qlcplus-service` command from
-[raspi5rackSetup](https://github.com/infrafast/raspi5rackSetup).
+Install and configure the services for your chosen profile before raspiLightGUI.
+For the included rack profile, QLC+ must be provided as `qlcplus.service` with
+the `qlcplus-service` command from
+[raspi5rackSetup](https://github.com/infrafast/raspi5rackSetup); Oculizer and
+Live Stage Assistant must also have their service wrappers installed.
 
 ### 1. Preflight
 

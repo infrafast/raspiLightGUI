@@ -47,12 +47,28 @@
 - Never add a console LED animation. Console mode replaces only the OLED and
   buttons; the GPIO LED remains real.
 - The LED must continue operating when the OLED is absent. In that case the
-  dashboard uses a headless backend and must not perform invisible OLED probes.
+  control panel uses a headless backend and must not perform invisible OLED probes.
 - The LED monitor checks only wired Ethernet and QLC+. It must not monitor
   Oculizer, Live Stage Assistant, or future systemd services.
 - Do not add command-line modes for forcing or testing individual LED channels.
 - The installer assumes a fresh system. Do not add migration, detection, or
   shutdown logic for an old `lsa-status-led.service`.
+
+## Service profiles
+
+- Treat the control-panel architecture as generic even though the repository ships
+  with a concrete live-production rack profile.
+- The included profile is QLC+ lighting control, Oculizer mixing agent, and Live
+  Stage Assistant, in that order. QLC+ is its primary service for the green LED.
+- Keep profile-specific identifiers and `PRIMARY_SERVICE_KEY` in
+  `managed_services.py`. Do not scatter service
+  names through presentation, state, action, or installer logic.
+- A different deployment should be adaptable by changing the service
+  declarations, wrapper paths, and primary LED service, without rewriting the
+  monitoring or menu algorithms.
+- In `README.md`, clearly distinguish generic control-panel behaviour from examples
+  produced by the included rack profile. Do not present the example services as
+  mandatory architectural components.
 
 ## Architecture
 
@@ -100,8 +116,9 @@ per-service callbacks or rendering branches.
   unchanged.
 - `SYSTEM` replaces the former separate service-state screen. Its inactive
   five-line preview contains the three declared service states, a combined
-  `Reboot / Shutdown` hint, and `OK = enter menu`, without a selection cursor.
-  Up/Down changes screens in this state.
+  `...` continuation hint, and `OK = enter menu`, without a selection cursor.
+  The hint must remain generic and must not duplicate action labels. Up/Down
+  changes screens in this state.
 - OK explicitly activates an action screen's item list. `Back` is its default
   selected item, and action mode remains active until the user selects and
   confirms `Back`. Confirmation dialogs default to `Cancel`.

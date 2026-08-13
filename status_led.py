@@ -1,9 +1,10 @@
-"""Low-overhead RGB LED monitor for Ethernet and qlcplus.service."""
+"""Low-overhead RGB LED monitor for Ethernet and the configured primary service."""
 
 from threading import Event, Thread
 from typing import Callable
 
 from gpio_devices import LedChannels
+from managed_services import PRIMARY_SERVICE_KEY
 from system_info import managed_service_states
 from system_monitor import network_state
 
@@ -12,9 +13,9 @@ PHASE_DURATION = 1.5
 BLINK_INTERVAL = 0.25
 
 
-def qlcplus_running() -> bool:
+def primary_service_running() -> bool:
     """Reuse the shared systemd snapshot used by the OLED service page."""
-    return managed_service_states()["QLC+"].runtime == "UP"
+    return managed_service_states()[PRIMARY_SERVICE_KEY].runtime == "UP"
 
 
 class StatusLedController:
@@ -25,7 +26,7 @@ class StatusLedController:
         on_failure: Callable[[Exception], None] | None = None,
         channels=None,
         network_probe=network_state,
-        service_probe=qlcplus_running,
+        service_probe=primary_service_running,
     ):
         self.channels = channels if channels is not None else LedChannels()
         self.network_probe = network_probe

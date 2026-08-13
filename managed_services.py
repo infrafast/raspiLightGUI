@@ -25,3 +25,4 @@ MANAGED_SERVICES = (
 )
 
 SERVICES_BY_KEY = {service.key: service for service in MANAGED_SERVICES}
+PRIMARY_SERVICE_KEY = "QLC+"

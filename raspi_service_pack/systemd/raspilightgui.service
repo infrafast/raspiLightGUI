@@ -1,5 +1,5 @@
 [Unit]
-Description=Raspberry Pi OLED dashboard and RGB status LED
+Description=Raspberry Pi OLED control panel and RGB status LED
 After=local-fs.target
 
 [Service]
