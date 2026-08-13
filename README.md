@@ -1,147 +1,167 @@
-# Interactive Menu with an OLED Display and Buttons on Raspberry Pi 5
+# Raspberry Pi OLED Dashboard and RGB Status LED
 
+raspiLightGUI is a lightweight Raspberry Pi 5 dashboard and controller. It
+combines:
 
-**Student**: Lennyn Alejandro Castillejo Robles<br>
-**Course**: Programmable Systems
+- a 128x64 SSD1306 OLED display and three navigation buttons;
+- an RGB status LED for Ethernet and QLC+;
+- system health and service monitoring;
+- confirmed restart, stop, and shutdown actions;
+- one continuously supervised systemd service.
 
-This project implements an extensible system dashboard on an `SSD1306` OLED
-display using a Raspberry Pi 5 running Raspberry Pi OS and Python 3. Three
-buttons navigate information pages and execute confirmed system actions.
-
----
-
-## 🛠️ Components Used
-
-- **Raspberry Pi 5 (Raspberry Pi OS)**
-- **SSD1306 OLED display (128x64 pixels, I2C protocol)**
-- **3 physical buttons**
-
----
-
-## 🔌 Connections
-
-### 📟 OLED Display (SSD1306)
-| OLED | Raspberry Pi 5 pin |
-|------|----------|
-| VCC  | 3.3V     |
-| GND  | GND      |
-| SDA  | GPIO2 (physical pin 3) |
-| SCL  | GPIO3 (physical pin 5) |
-
-### 🔘 Buttons
-
-| Function | GPIO | Physical pin |
-|----------|------|--------------|
-| Button 1 (Down) — ◀ / BACK | **GPIO5** | **Pin 29** |
-| Button 2 (Select) — OK | **GPIO6** | **Pin 31** |
-| Button 3 (Up) — ▶ / NEXT | **GPIO13** | **Pin 33** |
-| Button common ground | GND | **Pin 30** or **Pin 34** |
-
-All buttons are configured with an **internal pull-up resistor**. Connect one side
-of each button to its GPIO pin and connect their common side to physical GND pin
-30 or 34.
-
----
-
-## Dashboard screens
+## What the display shows
 
 ### MONITOR
 
-Refreshed every 10 seconds:
+The page shows CPU temperature, input voltage, uptime, CPU/RAM/disk usage, and
+the active wired IPv4 address. It updates when opened and every 10 seconds while
+visible.
 
-- CPU temperature, Pi 5 input voltage and power state
-- System uptime
-- CPU, RAM and root filesystem usage
-- IPv4 address of the active wired interface (`eth0`, `end0`, or another `en*`)
+Temperature states:
+
+| State | Temperature |
+|---|---|
+| `OK` | Below 70 C |
+| `HIGH` | 70 C to below 80 C |
+| `CRIT` | 80 C or above |
+
+Power states:
+
+| State | Condition |
+|---|---|
+| `OK` | 4.80 V or above, without undervoltage |
+| `LOW` | Above 4.65 V and below 4.80 V |
+| `CRIT` | 4.65 V or below, or undervoltage detected |
+| `N/A` | Voltage information unavailable |
 
 ### SERVICE STATE
 
-- Oculizer systemd state: `AUTO`, `MANUAL`, `STARTING`, `STOPPING`, `FAILED`,
-  `DOWN`, or `UNKNOWN`
-- Live Stage Assistant systemd state: `AUTO`, `MANUAL`, `STARTING`, `STOPPING`,
-  `FAILED`, `DOWN`, or `UNKNOWN`
-- `qlcplus-qml` process state
+The page shows `oculizer.service`, `livestageassistant.service`, and the
+`qlcplus-qml` application.
 
-For both services, `AUTO` means active and enabled at boot; `MANUAL` means active
-but disabled at boot. Assistant and Oculizer append `R:n` only when systemd
-reports more than one automatic restart, for example `ASSISTANT: AUTO R:2`.
-Three or more restarts mark the page title with `/!\`, as does a `FAILED` state.
-This makes a service that is currently running but unstable visible without
-adding another screen.
+| State | Meaning |
+|---|---|
+| `AUTO` | Running and enabled at boot |
+| `MANUAL` | Running but not enabled at boot |
+| `STARTING` | Starting or reloading |
+| `STOPPING` | Stopping |
+| `DOWN` | Stopped normally |
+| `FAILED` | Service failure |
+| `UNKNOWN` | State unavailable |
+
+`R:n` appears after more than one service restart. `/!\` in the title indicates
+a failed service, repeated restarts, critical temperature, or critical power.
 
 ### SYSTEM
 
-- Restart Live Stage Assistant
-- Stop Live Stage Assistant
-- Restart Oculizer
-- Stop Oculizer
-- Restart QLC+ with its captured executable, arguments, working directory and
-  environment
-- Shut down the Raspberry Pi
-- Go back from action mode to screen navigation
+The action page can:
 
-All system actions require confirmation. `Cancel` is selected by default. For a
-shutdown, the OLED displays `Shutting down...` before the poweroff request and
-keeps that message buffered while Raspberry Pi OS stops. The display becomes
-black when its power is removed; software running on the Pi cannot confirm a
-state reached after the Pi itself has powered off.
+- restart or stop Live Stage Assistant;
+- restart or stop Oculizer;
+- restart QLC+;
+- shut down the Raspberry Pi safely;
+- return to the screen list with `Back`.
 
-After each non-terminal action, the OLED shows a short result such as
-`Assistant restarted`, `Oculizer failed`, or `QLC+ not running`. More detailed
-command errors are written to the console instead of overflowing the display.
+Actions require confirmation and display a short success or failure message.
+`Back` and confirmation cancellation are selected by default.
+
+## RGB status LED
+
+Red indicates board power. Blue and green alternate to provide a visible
+heartbeat:
+
+| Check | Result | LED behaviour |
+|---|---|---|
+| Ethernet | Link and IPv4 address | Solid blue, appearing magenta with red |
+| Ethernet | Link without IPv4 | Blinking blue/magenta |
+| Ethernet | No link | Blue off; red only |
+| QLC+ | `qlcplus-qml` running | Solid green, appearing yellow with red |
+| QLC+ | Not running | Blinking green/yellow |
+
+Each Ethernet and QLC+ phase lasts about 1.5 seconds. Blink states alternate
+every 250 ms. The LED continues working when the OLED is disconnected or asleep.
+
+## Wiring
+
+| Function | BCM GPIO | Physical pin | Connection |
+|---|---:|---:|---|
+| OLED power | 3.3 V | 1 | OLED VCC |
+| RGB red anode | 3.3 V | 17 | Through 470 ohm resistor |
+| OLED and button grounds | GND | 30 or 34 | OLED GND and common side of all buttons |
+| RGB common cathode | GND | 14 | LED common cathode |
+| OLED SDA | GPIO2 | 3 | SDA |
+| OLED SCL | GPIO3 | 5 | SCL |
+| Button Down / Back | GPIO5 | 29 | Other terminal to common button GND |
+| Button Select / OK | GPIO6 | 31 | Other terminal to common button GND |
+| Button Up / Next | GPIO13 | 33 | Other terminal to common button GND |
+| RGB blue anode | GPIO27 | 13 | Through 330 ohm resistor |
+| RGB green anode | GPIO22 | 15 | Through 330 ohm resistor |
+
+Buttons use internal pull-up resistors. Never connect an LED channel without its
+series resistor.
 
 ## Navigation
 
-In information-screen mode:
+There are two interactive interfaces:
 
-- **Down / BACK** opens the next screen.
-- **Up / NEXT** opens the previous screen.
-- Reaching `SYSTEM` enters action mode automatically.
+- hardware mode uses the OLED and the three physical buttons;
+- simulated mode displays the same interface in a terminal and uses the
+  keyboard. It is intended for diagnosis when no OLED is connected.
 
-In action mode:
+Navigation is identical in both modes:
 
-- **Down** and **Up** select an item.
-- **OK** executes or confirms the selected item.
-- **Back** returns to screen-navigation mode. Pressing **OK** on the inactive
-  `SYSTEM` screen enters action mode again.
-- `Back` is selected by default whenever the `SYSTEM` action menu is entered, so
-  the initial selection is non-destructive.
-- Action menus longer than five items use a sliding five-line window that keeps
-  the selected item visible.
+| Action | Hardware | Simulated terminal |
+|---|---|---|
+| Previous page or item | Up / Next | Left or Up |
+| Next page or item | Down / Back | Right or Down |
+| Select / confirm | OK | Enter |
+| Quit local simulation | — | `q` |
 
----
+On information pages:
 
-## Permanent service installation
+- Down / Back: next page;
+- Up / Next: previous page;
+- OK on `SYSTEM`: enter its action list.
 
-The service pack follows the same lifecycle pattern as Oculizer. Run the
-read-only preflight first, then install:
+In the action list:
+
+- Down or Up: change selection;
+- OK: confirm the selected action;
+- Back: return to page navigation.
+
+The OLED sleeps after five minutes without input. The first button press wakes
+it without navigating or executing an action.
+
+## Installation
+
+### 1. Preflight
+
+From the repository directory, run the read-only check without `sudo`:
 
 ```bash
-chmod +x raspi_service_pack/install.sh raspi_service_pack/raspilightgui-service
 ./raspi_service_pack/install.sh --check --service-user pi
+```
+
+Missing software or an unavailable OLED may be reported here. The permanent
+installer installs supported dependencies and attempts to enable I2C.
+
+### 2. Permanent installation
+
+```bash
 sudo ./raspi_service_pack/install.sh --service-user pi
 ```
 
-The installer:
+The installer prepares Python and the required libraries, installs the service
+and administration command, and leaves the service disabled until you choose to
+start it.
 
-- installs the Python, I²C, GPIO Zero and `lgpio` dependencies;
-- installs the proportional DejaVu font used by the OLED renderer;
-- enables the Raspberry Pi I²C interface;
-- creates `.venv` and installs `requirements.txt`;
-- adds the service account to the `gpio` and `i2c` groups;
-- installs `raspilightgui.service` and its lifecycle command;
-- installs narrowly scoped passwordless permissions for service control and
-  system shutdown, plus restarting/stopping the Assistant and Oculizer services
-  from the OLED;
-- leaves the current enabled/running state unchanged.
-
-Enable at boot and start immediately:
+Enable automatic startup and start now:
 
 ```bash
 raspilightgui-service auto
 ```
 
-Lifecycle commands:
+Available administration commands:
 
 ```bash
 raspilightgui-service start
@@ -154,258 +174,47 @@ raspilightgui-service health
 raspilightgui-service noauto
 ```
 
-`noauto` disables boot startup without stopping a currently running instance.
-For a foreground diagnostic using the installed environment, run:
+`noauto` disables startup at boot without stopping the currently running
+service.
+
+## Local diagnosis
+
+Install the project first, then stop the service before using the same GPIO from
+a terminal:
 
 ```bash
-raspilightgui-service run-auto
-```
-
-The systemd unit uses `Restart=always` with a five-second delay, so an
-unexpected exit is restarted without creating a tight failure loop. A normal
-`raspilightgui-service stop` remains stopped.
-
-The installed service explicitly uses `--backend hardware`. If the OLED is
-missing, its journal contains a short `no SSD1306 connected` startup error and
-systemd retries after five seconds without emitting a Python traceback.
-
-## Runtime efficiency
-
-- Buttons use GPIO edge callbacks through `gpiozero`/`lgpio`; there is no
-  continuous button-polling loop.
-- The main thread sleeps until a button event or the next information refresh.
-- Monitoring and service states are sampled every 10 seconds and only for the
-  information screen currently displayed.
-- A valid wired IPv4 address is cached for one minute. An unavailable address is
-  retried every 10 seconds so networking that comes up after boot appears
-  promptly. The first lookup is always immediate.
-- The OLED buffer is sent over I²C only when the rendered content has changed.
-- OLED text uses proportional DejaVu Sans Condensed when available. Each title
-  and body line selects the largest configured size that fits its measured pixel
-  width and is shortened with `...` only as a final fallback.
-- Action screens do not have a periodic refresh.
-- Button debounce is handled at the GPIO event layer with a 50 ms interval.
-- After five minutes without a button event, the physical OLED powers down. The
-  monitoring loop continues at its normal low frequency; the first button press
-  wakes and redraws the current page without triggering navigation or an action.
-  Console mode never sleeps.
-
-An information-page title receives a `/!\` suffix when that page has an alert:
-
-- `MONITOR /!\` for temperature `HIGH`/`CRIT` or power `LOW`/`CRIT`;
-- `SERVICE STATE /!\` for a failed service or at least three reported restarts.
-
-### Pi 5 power state
-
-The MONITOR page reads the Pi 5 PMIC input with
-`vcgencmd pmic_read_adc EXT5V_V` and displays a compact line such as:
-
-```text
-T:45.0C OK V:5.08 OK
-```
-
-Temperature states deliberately flag heat before thermal throttling:
-
-| State | Condition |
-|-------|-----------|
-| `OK` | Temperature below 70 °C |
-| `HIGH` | Temperature from 70 °C up to, but not including, 80 °C |
-| `CRIT` | Temperature at or above 80 °C |
-
-Power states use these thresholds:
-
-| State | Condition |
-|-------|-----------|
-| `OK` | 5 V input is at least 4.80 V |
-| `LOW` | 5 V input is above 4.65 V and below 4.80 V |
-| `CRIT` | 5 V input is at or below 4.65 V, or the current undervoltage bit from `vcgencmd get_throttled` is set |
-| `N/A` | The PMIC reading is unavailable or unsupported |
-
-The 4.80 V reliability target and approximately 4.63 V hardware undervoltage
-threshold follow Raspberry Pi guidance. The UI deliberately uses 4.65 V as its
-critical boundary to provide a small safety margin. These values describe the
-Pi input, not an adjustable CPU core voltage.
-
-The service-pack commands must be installed at:
-
-```text
-/usr/local/bin/livestageassistant
-/usr/local/bin/oculizer-service
-```
-
-The dashboard user must own the running QLC+ process so that it can read and
-restart it. The installer creates the narrowly scoped shutdown and service
-control permissions automatically.
-
-The Assistant and Oculizer wrappers call `sudo systemctl` for restart and stop.
-Since the OLED service cannot enter an interactive password, the installer
-permits only these exact additional commands for the configured service user:
-
-```text
-/usr/bin/systemctl restart livestageassistant.service
-/usr/bin/systemctl stop livestageassistant.service
-/usr/bin/systemctl restart oculizer.service
-/usr/bin/systemctl stop oculizer.service
-```
-
-This is not a general passwordless `sudo` permission. After upgrading an
-existing raspiLightGUI installation, rerun the installer once to deploy the new
-rule:
-
-```bash
-sudo ./raspi_service_pack/install.sh --service-user pi
-sudo -u pi sudo -n /usr/bin/systemctl restart livestageassistant.service
-sudo -u pi sudo -n /usr/bin/systemctl stop livestageassistant.service
-```
-
-The second command is an optional verification: it must complete without asking
-for a password. The equivalent interactive wrapper command will then work too:
-
-```bash
-livestageassistant restart
-livestageassistant stop
-```
-
-## Manual development run
-
-For development without installing the systemd unit:
-
-```bash
-sudo raspi-config nonint do_i2c 0
-sudo apt install i2c-tools python3-venv python3-gpiozero python3-lgpio
-python3 -m venv .venv --system-site-packages
+raspilightgui-service stop
 source .venv/bin/activate
-pip install -r requirements.txt
-GPIOZERO_PIN_FACTORY=lgpio python lightGUI.py
 ```
 
-### Available launch modes
-
-After activating `.venv`, the application can be started in any of these modes:
+Available modes:
 
 ```bash
-python lightGUI.py --backend auto
+python lightGUI.py
 python lightGUI.py --backend hardware
 python lightGUI.py --backend console
 ```
 
-The OLED sleep timeout can be changed for a manual run, or disabled with zero:
+The first command uses automatic mode: it selects the OLED when available, the
+terminal interface during an interactive local run without an OLED, or the LED-
+only headless mode without an interactive terminal. Use the other commands only
+to force hardware or console mode for diagnosis.
 
-```bash
-python lightGUI.py --backend hardware --sleep-timeout 600
-python lightGUI.py --backend hardware --sleep-timeout 0
-```
+The physical RGB LED remains active in every mode. See [Navigation](#navigation)
+for the terminal controls.
 
-| Mode | Behaviour |
-|------|-----------|
-| `auto` | Tries the OLED and GPIO buttons first. If hardware initialization fails in an interactive TTY, it falls back to the console simulator. Without a TTY, it exits with an error. |
-| `hardware` | Requires the SSD1306 and initializes the GPIO buttons. Missing hardware produces a short startup error; no console fallback is attempted. |
-| `console` | Does not initialize the OLED or GPIO. It simulates the complete interface in an interactive terminal. |
+## OLED troubleshooting
 
-Omitting `--backend` is equivalent to selecting `auto`:
-
-```bash
-python lightGUI.py
-```
-
-### Console simulation
-
-The dashboard follows a Model/View/Presenter separation. The screen definitions
-and presenter do not depend on the OLED or GPIO implementation. It can therefore
-be exercised from an interactive terminal without connecting any hardware:
-
-```bash
-python lightGUI.py --backend console
-```
-
-Keyboard controls:
-
-- Left or Up: previous screen/item
-- Right or Down: next screen/item
-- Enter: OK
-- `q`: quit
-
-The console keeps a fixed 21-character display width. Long titles and content
-are shortened with `...`; unlike the OLED backend, the terminal backend does not
-attempt to reduce a font size.
-
-### Behaviour under systemd
-
-The installed unit always executes:
-
-```text
-lightGUI.py --backend hardware
-```
-
-Console fallback is deliberately disabled because a systemd service has no
-interactive terminal from which to read arrow keys. The resulting behaviour is:
-
-- with the OLED available, the dashboard runs continuously using GPIO buttons;
-- without the OLED, startup ends with a concise diagnostic in the journal;
-- `Restart=always` retries a failed startup after five seconds;
-- `raspilightgui-service stop` performs a deliberate stop and clears the OLED;
-- an unexpected crash is restarted after five seconds;
-- during a confirmed system shutdown, `Shutting down...` remains buffered on
-  the OLED instead of being replaced by another page.
-
-Inspect startup failures and runtime messages with:
-
-```bash
-raspilightgui-service status
-raspilightgui-service logs
-```
-
-A normally-open button cannot be reliably distinguished from an unconnected
-button in software: both appear as an inactive input held high by the configured
-pull-up resistor. The OLED, unlike the buttons, can be detected by its I²C
-acknowledgement.
-
-## I²C troubleshooting
-
-At startup, the application scans the bus and accepts the two common SSD1306
-addresses, `0x3C` and `0x3D`. If startup reports that no SSD1306 was detected,
-stop the service and inspect bus 1. `i2cdetect` is an optional diagnostic command
-provided by the Raspberry Pi OS package `i2c-tools`:
+If no OLED is detected, the installed service continues running the RGB LED.
+Check the I2C bus with:
 
 ```bash
 raspilightgui-service stop
-sudo apt install i2c-tools
-ls -l /dev/i2c-1
 i2cdetect -y 1
 ```
 
-The address table should contain `3c` or `3d`. If every position is `--`, check:
+An SSD1306 normally appears at address `3c` or `3d`. If neither appears, check
+3.3 V, ground, SDA on physical pin 3, and SCL on physical pin 5.
 
-- OLED VCC to Pi 3.3 V (physical pin 1 or 17), never 5 V unless the exact module
-  explicitly supports it;
-- OLED GND to a Pi GND pin;
-- OLED SDA to GPIO2, physical pin 3;
-- OLED SCL to GPIO3, physical pin 5;
-- I²C enabled with `sudo raspi-config nonint do_i2c 0` followed by a reboot.
-
-If `i2cdetect` shows another address, confirm that the display controller really
-is an SSD1306. An `Errno 121 Remote I/O error` means that the addressed device did
-not acknowledge the I²C transaction and normally indicates address, wiring, or
-hardware rather than a Python failure.
-
-## Extending the dashboard
-
-The screen registry is the `SCREENS` tuple in `lightGUI.py`:
-
-```python
-InfoScreen("MY INFO", my_content_function)
-ActionScreen(
-    "MY ACTIONS",
-    (
-        ActionItem("Do something", my_action_function, confirm=True),
-        ActionItem("Back"),
-    ),
-    default_index=0,
-)
-```
-
-An information provider returns `ScreenData` (or a simple `list[str]` when no
-alert flag is needed). An action returns a short status string. Providers are
-kept in `system_info.py`, actions in `system_actions.py`, and may call other
-Python modules or external programs. Every action screen must end with a `Back`
-item whose callback is omitted.
+The LED behaviour was integrated from the companion
+[raspiLed project](https://github.com/infrafast/raspiLed).

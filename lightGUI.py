@@ -3,6 +3,7 @@
 import argparse
 from dataclasses import dataclass
 import signal
+from threading import Event
 import time
 from typing import Callable
 
@@ -15,6 +16,7 @@ from system_actions import (
     stop_oculizer,
 )
 from system_info import ScreenData, monitor_content, service_content
+from status_led import StatusLedController
 from ui_backends import create_backend
 
 
@@ -97,6 +99,11 @@ class DashboardPresenter:
         self.last_refresh = time.monotonic()
 
     def render(self):
+        # In headless mode the LED worker is the only user interface. Avoid
+        # collecting temperature, CPU and service data that nobody can see.
+        if getattr(self.view, "is_headless", False):
+            self.last_refresh = time.monotonic()
+            return
         if isinstance(self.screen, InfoScreen):
             try:
                 content = self.screen.content()
@@ -181,7 +188,10 @@ class DashboardPresenter:
         while not self.stop_requested:
             now = time.monotonic()
             deadlines = []
-            if isinstance(self.screen, InfoScreen):
+            if (
+                isinstance(self.screen, InfoScreen)
+                and not getattr(self.view, "is_headless", False)
+            ):
                 deadlines.append(self.last_refresh + REFRESH_SECONDS)
             if (
                 self.sleep_seconds > 0
@@ -224,6 +234,7 @@ class DashboardPresenter:
                     self.display_sleeping = self.view.sleep()
                 if (
                     isinstance(self.screen, InfoScreen)
+                    and not getattr(self.view, "is_headless", False)
                     and now - self.last_refresh >= REFRESH_SECONDS
                 ):
                     self.render()
@@ -258,6 +269,8 @@ def parse_args():
 def main():
     args = parse_args()
     presenter = None
+    led_controller = None
+    led_failure = Event()
 
     def stop_service(_signum, _frame):
         if presenter is not None and presenter.shutdown_in_progress:
@@ -268,16 +281,33 @@ def main():
     signal.signal(signal.SIGTERM, stop_service)
     signal.signal(signal.SIGINT, stop_service)
     try:
+        def led_failed(error):
+            print(f"Status LED worker failed: {error}")
+            led_failure.set()
+            if presenter is not None:
+                presenter.request_stop()
+
+        try:
+            led_controller = StatusLedController(on_failure=led_failed)
+        except Exception as error:
+            raise RuntimeError(f"status LED GPIO unavailable: {error}") from error
+        led_controller.start()
         view, input_device, backend = create_backend(args.backend)
         print(f"Dashboard backend: {backend}")
         presenter = DashboardPresenter(view, input_device, max(0.0, args.sleep_timeout))
+        if led_failure.is_set():
+            presenter.request_stop()
         presenter.run()
+        if led_controller.error is not None:
+            raise RuntimeError(f"status LED failed: {led_controller.error}")
     except (OSError, RuntimeError) as error:
         print(f"Startup failed: {error}")
         raise SystemExit(1) from None
     finally:
         if presenter is not None and not presenter.shutdown_in_progress:
             presenter.close()
+        if led_controller is not None:
+            led_controller.stop()
 
 
 if __name__ == "__main__":

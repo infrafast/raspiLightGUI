@@ -1,5 +1,5 @@
 [Unit]
-Description=Raspberry Pi OLED system dashboard
+Description=Raspberry Pi OLED dashboard and RGB status LED
 After=local-fs.target
 
 [Service]
@@ -9,8 +9,7 @@ Group=@SERVICE_GROUP@
 WorkingDirectory=@REPO_ROOT@
 Environment=HOME=@SERVICE_HOME@
 Environment=PYTHONUNBUFFERED=1
-Environment=GPIOZERO_PIN_FACTORY=lgpio
-ExecStart=@REPO_ROOT@/.venv/bin/python @REPO_ROOT@/lightGUI.py --backend hardware
+ExecStart=@REPO_ROOT@/.venv/bin/python @REPO_ROOT@/lightGUI.py
 Restart=always
 RestartSec=5
 TimeoutStopSec=10

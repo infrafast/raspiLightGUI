@@ -1,12 +1,13 @@
 """Hardware and terminal view/input adapters for the dashboard presenter."""
 
-from queue import Empty, SimpleQueue
 import os
 from pathlib import Path
 import select
 import sys
 from threading import Event
 import time
+
+from gpio_devices import GpioInput
 
 
 WIDTH = 128
@@ -132,56 +133,6 @@ class OledView:
         self.oled.show()
         self.i2c.deinit()
 
-
-class GpioInput:
-    """Edge-triggered GPIO button input; it performs no active polling."""
-
-    def __init__(self):
-        from gpiozero import Button
-
-        self.events = SimpleQueue()
-        self.wake = Event()
-        self.buttons = (
-            self._make_button(Button, 5, "down"),
-            self._make_button(Button, 6, "select"),
-            self._make_button(Button, 13, "up"),
-        )
-
-    def _make_button(self, button_class, gpio: int, event_name: str):
-        button = button_class(gpio, pull_up=True, bounce_time=0.05)
-        button.when_pressed = lambda: self._push(event_name)
-        return button
-
-    def _push(self, event_name: str):
-        self.events.put(event_name)
-        self.wake.set()
-
-    def next_event(self, timeout: float | None = None) -> str | None:
-        self.wake.clear()
-        try:
-            return self.events.get_nowait()
-        except Empty:
-            self.wake.wait(timeout)
-        try:
-            return self.events.get_nowait()
-        except Empty:
-            return None
-
-    def discard_events(self):
-        while True:
-            try:
-                self.events.get_nowait()
-            except Empty:
-                return
-
-    def wake_up(self):
-        self.wake.set()
-
-    def close(self):
-        for button in self.buttons:
-            button.close()
-
-
 class ConsoleView:
     """TTY representation with the same 21x6 logical display area."""
 
@@ -268,21 +219,61 @@ class KeyboardInput:
         )
 
 
+class HeadlessView:
+    """No-display view used when the OLED is absent under systemd."""
+
+    can_sleep = False
+    is_headless = True
+
+    def display(self, title: str, lines: list[str], selected: int | None = None):
+        pass
+
+    def sleep(self) -> bool:
+        return False
+
+    def wake(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class HeadlessInput:
+    """Blocking input adapter that only wakes for process shutdown."""
+
+    def __init__(self):
+        self.event = Event()
+
+    def next_event(self, timeout: float | None = None) -> str | None:
+        self.event.wait(timeout)
+        self.event.clear()
+        return None
+
+    def discard_events(self):
+        pass
+
+    def wake_up(self):
+        self.event.set()
+
+    def close(self):
+        self.event.set()
+
+
 def create_backend(mode: str):
-    """Build matching view/input adapters, with interactive auto fallback."""
+    """Build dashboard adapters; LED GPIO is initialized independently."""
     if mode == "console":
         return ConsoleView(), KeyboardInput(), "console"
     try:
         view = OledView()
-        try:
-            input_device = GpioInput()
-        except Exception:
-            view.close()
-            raise
-        return view, input_device, "hardware"
     except Exception as error:
         if mode == "auto" and sys.stdin.isatty() and sys.stdout.isatty():
             print(f"Hardware unavailable: {error}")
             print("Using interactive console simulation.")
             return ConsoleView(), KeyboardInput(), "console"
-        raise RuntimeError(f"hardware unavailable: {error}") from error
+        print(f"OLED unavailable: {error}; LED monitoring continues headless.")
+        return HeadlessView(), HeadlessInput(), "headless"
+    try:
+        return view, GpioInput(), "hardware"
+    except Exception as error:
+        view.close()
+        raise RuntimeError(f"button GPIO unavailable: {error}") from error

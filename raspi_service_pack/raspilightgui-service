@@ -3,7 +3,6 @@ set -euo pipefail
 
 SERVICE=raspilightgui.service
 REPO_ROOT=@REPO_ROOT@
-export GPIOZERO_PIN_FACTORY=lgpio
 
 run_systemctl() {
   sudo -n /usr/bin/systemctl "$@" "$SERVICE"

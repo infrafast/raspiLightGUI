@@ -7,6 +7,9 @@ SERVICE_CLIENT=/usr/local/bin/raspilightgui-service
 APP_UNIT=raspilightgui.service
 service_user=${SUDO_USER:-pi}
 check_only=false
+required_commands=(apt-get systemctl)
+packaged_commands=(pgrep)
+required_imports=(adafruit_ssd1306 board busio gpiozero lgpio PIL psutil)
 
 usage() {
   cat <<'EOF'
@@ -24,6 +27,75 @@ EOF
 fail() {
   echo "install.sh: $*" >&2
   exit 1
+}
+
+report_preflight() {
+  local missing=false
+  local python_bin=python3
+
+  echo "Read-only preflight"
+  for command_name in "${required_commands[@]}"; do
+    if command -v "$command_name" >/dev/null 2>&1; then
+      echo "  OK      command: $command_name"
+    else
+      fail "required command '$command_name' is missing"
+    fi
+  done
+  for command_name in "${packaged_commands[@]}"; do
+    if command -v "$command_name" >/dev/null 2>&1; then
+      echo "  OK      command: $command_name"
+    else
+      echo "  MISSING command: $command_name (installed during setup)"
+      missing=true
+    fi
+  done
+
+  if command -v python3 >/dev/null 2>&1; then
+    if ! python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
+      fail "Python 3.11 or newer is required"
+    fi
+    echo "  OK      Python:  $(python3 --version 2>&1)"
+  else
+    echo "  MISSING Python 3 (installed during setup)"
+    missing=true
+    python_bin=
+  fi
+
+  if [[ -x $REPO_ROOT/.venv/bin/python ]]; then
+    python_bin=$REPO_ROOT/.venv/bin/python
+    echo "  OK      virtual environment: $REPO_ROOT/.venv"
+  else
+    echo "  MISSING virtual environment: created during setup"
+  fi
+
+  if [[ -n $python_bin ]]; then
+    if ! "$python_bin" - "${required_imports[@]}" <<'PY'
+import importlib.util
+import sys
+
+missing = [name for name in sys.argv[1:] if importlib.util.find_spec(name) is None]
+if missing:
+    print("  MISSING Python modules: " + ", ".join(missing))
+    print("          installed from requirements.txt during setup")
+    raise SystemExit(1)
+else:
+    print("  OK      Python modules: " + ", ".join(sys.argv[1:]))
+PY
+    then
+      missing=true
+    fi
+  fi
+
+  if [[ -e /dev/i2c-1 ]]; then
+    echo "  OK      I2C device: /dev/i2c-1"
+  else
+    echo "  WARNING I2C device absent; setup will enable I2C when raspi-config is available"
+  fi
+  if $missing; then
+    echo "Preflight compatible; missing packaged dependencies will be installed."
+  else
+    echo "Preflight passed; no changes made."
+  fi
 }
 
 while (($#)); do
@@ -51,10 +123,7 @@ echo "  repository:   $REPO_ROOT"
 echo "  service user: $service_user"
 
 if $check_only; then
-  command -v python3 >/dev/null || fail "python3 is missing"
-  python3 -c 'import sys; assert sys.version_info >= (3, 11), sys.version'
-  [[ -e /dev/i2c-1 ]] || echo "Warning: /dev/i2c-1 is absent; enable I2C before starting."
-  echo "Preflight passed; no changes made."
+  report_preflight
   exit 0
 fi
 
@@ -62,7 +131,18 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y fonts-dejavu-core i2c-tools python3 python3-venv python3-gpiozero python3-lgpio
+apt-get install -y \
+  fonts-dejavu-core \
+  i2c-tools \
+  procps \
+  python3 \
+  python3-pip \
+  python3-venv \
+  python3-gpiozero \
+  python3-lgpio \
+  sudo
+python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' \
+  || fail "Python 3.11 or newer is required"
 if command -v raspi-config >/dev/null 2>&1; then
   raspi-config nonint do_i2c 0
 fi
@@ -70,10 +150,22 @@ fi
 python3 -m venv "$REPO_ROOT/.venv" --system-site-packages
 "$REPO_ROOT/.venv/bin/python" -m pip install --upgrade pip
 "$REPO_ROOT/.venv/bin/python" -m pip install -r "$REPO_ROOT/requirements.txt"
+chown -R "$service_user:$service_group" "$REPO_ROOT/.venv"
 
 for group in gpio i2c; do
   getent group "$group" >/dev/null && usermod -a -G "$group" "$service_user"
 done
+
+runuser -u "$service_user" -- \
+  "$REPO_ROOT/.venv/bin/python" - "${required_imports[@]}" <<'PY'
+import importlib
+import sys
+
+for name in sys.argv[1:]:
+    importlib.import_module(name)
+print("Python runtime dependencies verified: " + ", ".join(sys.argv[1:]))
+PY
+runuser -u "$service_user" -- test -r "$REPO_ROOT/lightGUI.py"
 
 python3 - "$SCRIPT_DIR/raspilightgui-service" "$SERVICE_CLIENT" "$REPO_ROOT" <<'PY'
 import os

@@ -1,16 +1,15 @@
 """Pluggable content providers for information screens."""
 
 from dataclasses import dataclass
-import socket
 import subprocess
 import time
 import re
 
 import psutil
 
+from system_monitor import network_state, process_running
 
-IP_REFRESH_SECONDS = 60.0
-IP_DOWN_RETRY_SECONDS = 10.0
+
 POWER_OK_VOLTS = 4.80
 # The hardware threshold is approximately 4.63 V. Use 4.65 V so the UI warns
 # just before that threshold is crossed.
@@ -18,8 +17,6 @@ POWER_CRITICAL_VOLTS = 4.65
 TEMP_HIGH_C = 70.0
 TEMP_CRITICAL_C = 80.0
 SERVICE_RESTART_ALERT = 3
-_cached_ip: str | None = None
-_last_ip_refresh: float | None = None
 
 
 @dataclass(frozen=True)
@@ -99,41 +96,8 @@ def _power_info() -> tuple[float | None, str]:
 
 
 def _interface_ip() -> str:
-    """Return a wired IPv4 address, caching success longer than a miss."""
-    global _cached_ip, _last_ip_refresh
-
-    now = time.monotonic()
-    cache_age = now - _last_ip_refresh if _last_ip_refresh is not None else None
-    cache_lifetime = (
-        IP_REFRESH_SECONDS if _cached_ip not in (None, "DOWN") else IP_DOWN_RETRY_SECONDS
-    )
-    if cache_age is not None and cache_age < cache_lifetime:
-        return _cached_ip
-
-    interfaces = psutil.net_if_addrs()
-    stats = psutil.net_if_stats()
-    candidates = ["eth0"]
-    candidates.extend(
-        sorted(
-            name
-            for name in interfaces
-            if name != "eth0" and name.startswith(("eth", "en"))
-        )
-    )
-    _cached_ip = "DOWN"
-    for interface in candidates:
-        if interface not in interfaces or not stats.get(interface, None):
-            continue
-        if not stats[interface].isup:
-            continue
-        for address in interfaces[interface]:
-            if address.family == socket.AF_INET and not address.address.startswith("127."):
-                _cached_ip = address.address
-                break
-        if _cached_ip != "DOWN":
-            break
-    _last_ip_refresh = now
-    return _cached_ip
+    """Return the latest wired IPv4 snapshot shared with the LED worker."""
+    return network_state(max_age=10.0).ipv4 or "DOWN"
 
 
 def monitor_content() -> ScreenData:
@@ -197,14 +161,11 @@ def _systemd_info(service: str) -> tuple[str, int]:
     return status, restarts
 
 
-def _process_status(command: list[str]) -> str:
-    try:
-        result = subprocess.run(
-            command, capture_output=True, text=True, timeout=3, check=False
-        )
-    except (OSError, subprocess.TimeoutExpired):
+def _process_status(pattern: str) -> str:
+    running = process_running(pattern, max_age=10.0)
+    if running is None:
         return "UNKNOWN"
-    return "UP" if result.returncode == 0 else "DOWN"
+    return "UP" if running else "DOWN"
 
 
 def _managed_service_info(service: str) -> tuple[str, int]:
@@ -246,7 +207,7 @@ def service_content() -> ScreenData:
         lines=[
             _service_line("OCULIZER", oculizer_state, oculizer_restarts),
             _service_line("ASSISTANT", assistant_state, assistant_restarts),
-            f"QLC+: {_process_status(['pgrep', '-f', 'qlcplus-qml'])}",
+            f"QLC+: {_process_status('qlcplus-qml')}",
         ],
         alert=alert,
     )
