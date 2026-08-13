@@ -83,9 +83,8 @@ per-service callbacks or rendering branches.
 - Document OLED VCC on 3.3 V physical pin 1. OLED ground and the common side of
   all buttons use physical ground pin 30 or 34; each button's other terminal
   connects to its assigned GPIO.
-- Information screens refresh immediately on entry and every 10 seconds while
-  visible.
-- Action screens do not refresh periodically.
+- `MONITOR` and the inactive `SYSTEM` preview refresh immediately on entry and
+  every 10 seconds while visible. Active action menus do not refresh.
 - Identical OLED frames are not sent again over I2C.
 - The screen sleeps after 300 seconds of inactivity by default. Monitoring and
   LED operation continue; the first button event wakes the display only.
@@ -99,10 +98,10 @@ per-service callbacks or rendering branches.
   vertical spacing must remain fixed. Console lines are truncated with `...`.
 - Content begins two pixels below the title layout while the title position is
   unchanged.
-- An `ActionScreen` must initially behave like an information screen for
-  navigation: Up/Down changes screens and no item is selected. It still renders
-  the same five-line menu window, but replaces the visible `Back` label with
-  `OK = enter menu` while inactive.
+- `SYSTEM` replaces the former separate service-state screen. Its inactive
+  five-line preview contains the three declared service states, a combined
+  `Reboot / Shutdown` hint, and `OK = enter menu`, without a selection cursor.
+  Up/Down changes screens in this state.
 - OK explicitly activates an action screen's item list. `Back` is its default
   selected item, and action mode remains active until the user selects and
   confirms `Back`. Confirmation dialogs default to `Cancel`.
@@ -120,9 +119,9 @@ per-service callbacks or rendering branches.
 - Store runtime state and boot-enabled state separately in `ServiceStatus`.
   Query `is-enabled` even when a service is not running. Append `AUTO` to a
   non-running display state when boot startup is enabled.
-- `SERVICE STATE` and `SYSTEM` must consume the same managed-service snapshot,
-  cached for at most 10 seconds. Refresh it when stale on entry to `SYSTEM`, and
-  invalidate it after an executed action.
+- The inactive `SYSTEM` preview consumes the shared managed-service snapshot,
+  cached for at most 10 seconds. Force a refresh on entry and every 10 seconds,
+  and invalidate it after an executed action.
 - Generate service lines, alerts, and actions by iterating only over
   `MANAGED_SERVICES`; do not add per-service monitoring or action functions.
 - Keep the root `SYSTEM` menu to one item per declared service, followed by

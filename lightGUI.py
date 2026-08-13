@@ -53,6 +53,8 @@ class ActionScreen:
 class ActionMenu:
     title: str
     items: tuple[ActionItem, ...]
+    preview_lines: tuple[str, ...] = ()
+    alert: bool = False
 
 
 def service_action_menu(service: ServiceDefinition) -> ActionMenu:
@@ -92,17 +94,20 @@ def service_action_menu(service: ServiceDefinition) -> ActionMenu:
             )
         )
     items.append(ActionItem("Back"))
-    return ActionMenu(f"{service.label} {status.display_state}", tuple(items))
+    return ActionMenu(
+        f"{service.label} {status.display_state}", tuple(items), alert=status.alert
+    )
 
 
 def system_action_menu() -> ActionMenu:
     """Build the compact root menu from the single service declaration."""
+    service_data = service_content()
     items: list[ActionItem] = [
         ActionItem(
-            service.label,
+            line,
             submenu=partial(service_action_menu, service),
         )
-        for service in MANAGED_SERVICES
+        for service, line in zip(MANAGED_SERVICES, service_data.lines)
     ]
     items.extend(
         (
@@ -123,13 +128,17 @@ def system_action_menu() -> ActionMenu:
             ActionItem("Back"),
         )
     )
-    return ActionMenu("SYSTEM", tuple(items))
+    return ActionMenu(
+        "SYSTEM",
+        tuple(items),
+        tuple(service_data.lines + ["Reboot / Shutdown", "OK = enter menu"]),
+        service_data.alert,
+    )
 
 
 # Model: add screens and plug regular Python callables into this registry.
 SCREENS = (
     InfoScreen("MONITOR", monitor_content),
-    InfoScreen("SERVICE STATE", service_content),
     ActionScreen(
         "SYSTEM",
         system_action_menu,
@@ -191,6 +200,10 @@ class DashboardPresenter:
             if self.action_menu is None:
                 self.refresh_action_menu()
             action_menu = self.action_menu
+            title = action_menu.title + (" /!\\" if action_menu.alert else "")
+            if not self.action_mode:
+                self.display(title, list(action_menu.preview_lines))
+                return
             visible_count = 5
             default_index = len(action_menu.items) - 1
             display_index = self.item_index if self.action_mode else default_index
@@ -200,12 +213,8 @@ class DashboardPresenter:
                 window_start : window_start + visible_count
             ]
             labels = [item.label for item in visible_items]
-            if not self.action_mode:
-                default_visible_index = default_index - window_start
-                if 0 <= default_visible_index < len(labels):
-                    labels[default_visible_index] = "OK = enter menu"
             self.display(
-                action_menu.title if self.action_mode else self.screen.title,
+                title,
                 labels,
                 display_index - window_start if self.action_mode else None,
             )
@@ -216,7 +225,7 @@ class DashboardPresenter:
         self.menu_stack.clear()
         if isinstance(self.screen, ActionScreen):
             self.menu_provider = self.screen.menu
-            self.refresh_action_menu()
+            self.refresh_action_menu(force=True)
         else:
             self.action_menu = None
             self.menu_provider = None
@@ -296,7 +305,10 @@ class DashboardPresenter:
             now = time.monotonic()
             deadlines = []
             if (
-                isinstance(self.screen, InfoScreen)
+                (
+                    isinstance(self.screen, InfoScreen)
+                    or isinstance(self.screen, ActionScreen) and not self.action_mode
+                )
                 and not getattr(self.view, "is_headless", False)
             ):
                 deadlines.append(self.last_refresh + REFRESH_SECONDS)
@@ -340,10 +352,16 @@ class DashboardPresenter:
                 ):
                     self.display_sleeping = self.view.sleep()
                 if (
-                    isinstance(self.screen, InfoScreen)
+                    (
+                        isinstance(self.screen, InfoScreen)
+                        or isinstance(self.screen, ActionScreen)
+                        and not self.action_mode
+                    )
                     and not getattr(self.view, "is_headless", False)
                     and now - self.last_refresh >= REFRESH_SECONDS
                 ):
+                    if isinstance(self.screen, ActionScreen):
+                        self.refresh_action_menu(force=True)
                     self.render()
 
     def request_stop(self):

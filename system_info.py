@@ -48,6 +48,10 @@ class ServiceStatus:
             return f"{self.runtime} AUTO"
         return self.runtime
 
+    @property
+    def alert(self) -> bool:
+        return self.runtime == "FAILED" or self.restarts >= SERVICE_RESTART_ALERT
+
 
 def _temperature_info() -> tuple[float | None, str]:
     try:
@@ -248,8 +252,7 @@ def service_content() -> ScreenData:
     """Return the states of all declared systemd services."""
     states = managed_service_states()
     alert = any(
-        status.runtime == "FAILED" or status.restarts >= SERVICE_RESTART_ALERT
-        for status in states.values()
+        status.alert for status in states.values()
     )
     return ScreenData(
         lines=[

@@ -34,10 +34,20 @@ Power states:
 | `CRIT` | 4.65 V or below, or undervoltage detected |
 | `N/A` | Voltage information unavailable |
 
-### SERVICE STATE
+### SYSTEM
 
-The page shows `qlcplus.service`, `oculizer.service`, and
-`livestageassistant.service`, in that order.
+When inactive, the page shows `qlcplus.service`, `oculizer.service`, and
+`livestageassistant.service`, in that order. It refreshes when opened and every
+10 seconds:
+
+```text
+SYSTEM
+QLC+: AUTO
+OCULIZER: DOWN
+ASSISTANT: FAILED
+Reboot / Shutdown
+OK = enter menu
+```
 
 | State | Meaning |
 |---|---|
@@ -55,11 +65,9 @@ state, for example `DOWN AUTO` or `FAILED AUTO`.
 `R:n` appears after more than one service restart. `/!\` in the title indicates
 a failed service, repeated restarts, critical temperature, or critical power.
 
-### SYSTEM
-
-The main action page contains one entry per service, followed by `Reboot`,
-`Shutdown`, and `Back`. Selecting QLC+, Oculizer, or Assistant opens a
-contextual submenu that can:
+Pressing OK activates the menu. It contains one selectable entry per service,
+followed by `Reboot`, `Shutdown`, and `Back`. Selecting QLC+, Oculizer, or
+Assistant opens a contextual submenu that can:
 
 - stop or restart the service when it is running or starting;
 - start it when it is stopped, failed, or stopping;
@@ -72,8 +80,8 @@ confirmation. `Back` returns from a service submenu to `SYSTEM`, then from
 Actions require confirmation and display a short success or failure message.
 `Back` and confirmation cancellation are selected by default.
 If a service state or startup mode is unavailable, potentially unsafe actions
-are omitted. Menus use the same states shown on `SERVICE STATE`, but remain
-stable while you are selecting an item.
+are omitted. Statuses stop refreshing while a menu is active, so an item cannot
+move while you are selecting it.
 
 ## RGB status LED
 
@@ -132,10 +140,9 @@ On information pages:
 - Down / Back: next page;
 - Up / Next: previous page;
 
-The inactive `SYSTEM` page behaves like every other page: Up and Down continue
-scrolling through the screens. It shows the action-menu preview without a
-selection cursor, with `OK = enter menu` in place of `Back`. Press OK only when
-you want to activate its selectable action list.
+The inactive `SYSTEM` page behaves like `MONITOR`: Up and Down continue
+scrolling through the two screens. It shows service statuses without a selection
+cursor; press OK only when you want to activate its selectable action list.
 
 In the action list:
 
