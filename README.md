@@ -27,6 +27,7 @@ MANAGED_SERVICES = (
     ServiceDefinition(
         "OCULIZER", "Oculizer", "oculizer.service",
         "/usr/local/bin/oculizer-service",
+        ("QLC+",),
     ),
     ServiceDefinition(
         "ASSISTANT", "Assistant", "livestageassistant.service",
@@ -36,6 +37,10 @@ MANAGED_SERVICES = (
 
 PRIMARY_SERVICE_KEY = "QLC+"
 ```
+
+The optional final tuple declares service dependencies. In this profile,
+Oculizer requires QLC+. Trying to start Oculizer while QLC+ is not running
+displays `Start QLC+ first` and does not issue the start command.
 
 ## What the display shows
 
@@ -111,7 +116,9 @@ first menu item is selected when a menu opens, while confirmation cancellation
 remains selected by default.
 If a service state or startup mode is unavailable, potentially unsafe actions
 are omitted. Statuses stop refreshing while a menu is active, so an item cannot
-move while you are selecting it.
+move while you are selecting it. After an action, the control panel briefly
+waits for the service to finish starting or stopping before updating its status
+and available actions.
 
 ## RGB status LED
 

@@ -213,6 +213,11 @@ def _managed_service_info(service: str) -> ServiceStatus:
     return ServiceStatus(runtime, enabled, restarts)
 
 
+def read_service_status(service) -> ServiceStatus:
+    """Read one declared service without rebuilding the shared snapshot."""
+    return _managed_service_info(service.unit)
+
+
 def managed_service_states(
     max_age: float = SERVICE_STATE_MAX_AGE,
 ) -> dict[str, ServiceStatus]:

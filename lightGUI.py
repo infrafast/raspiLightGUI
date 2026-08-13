@@ -15,6 +15,7 @@ from system_info import (
     invalidate_service_states,
     managed_service_states,
     monitor_content,
+    read_service_status,
     service_content,
 )
 from status_led import StatusLedController
@@ -23,6 +24,7 @@ from ui_backends import create_backend
 
 REFRESH_SECONDS = 10.0
 OLED_SLEEP_SECONDS = 300.0
+SERVICE_SETTLE_SECONDS = 10.0
 ContentProvider = Callable[[], ScreenData | list[str]]
 ActionCallback = Callable[[], str]
 
@@ -41,6 +43,7 @@ class ActionItem:
     confirm: bool = False
     progress_message: str = "Working..."
     terminal: bool = False
+    service: ServiceDefinition | None = None
 
 
 @dataclass(frozen=True)
@@ -75,6 +78,7 @@ def service_action_menu(service: ServiceDefinition) -> ActionMenu:
                 f"{action.title()} {service.label}",
                 partial(run_service_action, service, action),
                 confirm=action == "stop",
+                service=service,
             )
         )
     if status.enabled is True:
@@ -83,6 +87,7 @@ def service_action_menu(service: ServiceDefinition) -> ActionMenu:
                 "Manual",
                 partial(run_service_action, service, "noauto"),
                 confirm=True,
+                service=service,
             )
         )
     elif status.enabled is False:
@@ -91,6 +96,7 @@ def service_action_menu(service: ServiceDefinition) -> ActionMenu:
                 "Auto",
                 partial(run_service_action, service, "auto"),
                 confirm=False,
+                service=service,
             )
         )
     items.append(ActionItem("Back"))
@@ -267,7 +273,9 @@ class DashboardPresenter:
             return
         if item.callback is None:
             if self.menu_stack:
-                self.action_menu, self.menu_provider, self.item_index = self.menu_stack.pop()
+                _old_menu, self.menu_provider, previous_index = self.menu_stack.pop()
+                self.action_menu = self.menu_provider()
+                self.item_index = min(previous_index, len(self.action_menu.items) - 1)
             else:
                 self.action_mode = False
             self.render()
@@ -283,6 +291,8 @@ class DashboardPresenter:
         except Exception as error:
             print(f"Action failed: {error}")
             result = "Action failed"
+        if item.service is not None:
+            self.wait_for_service_settle(item.service)
         if item.terminal and result == "Shutdown requested":
             self.display("SYSTEM", ["Shutting down...", "Please wait"])
             while True:
@@ -298,6 +308,17 @@ class DashboardPresenter:
         self.input.discard_events()
         self.refresh_action_menu(force=True)
         self.render()
+
+    @staticmethod
+    def wait_for_service_settle(service: ServiceDefinition):
+        """Wait briefly for an asynchronous systemd transition to finish."""
+        deadline = time.monotonic() + SERVICE_SETTLE_SECONDS
+        while time.monotonic() < deadline:
+            status = read_service_status(service)
+            if status.runtime not in ("STARTING", "STOPPING"):
+                break
+            time.sleep(1.0)
+        invalidate_service_states()
 
     def run(self):
         self.render()

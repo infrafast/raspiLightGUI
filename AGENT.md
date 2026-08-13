@@ -66,6 +66,11 @@
 - A different deployment should be adaptable by changing the service
   declarations, wrapper paths, and primary LED service, without rewriting the
   monitoring or menu algorithms.
+- Declare dependencies by service key in `ServiceDefinition.depends_on`. Before
+  a Start action, obtain a fresh shared snapshot and require every dependency to
+  have runtime `UP`. On failure, do not call the wrapper; return the OLED-safe
+  message `Start <dependency label> first`. The included profile declares that
+  Oculizer depends on QLC+.
 - In `README.md`, clearly distinguish generic control-panel behaviour from examples
   produced by the included rack profile. Do not present the example services as
   mandatory architectural components.
@@ -155,6 +160,10 @@ per-service callbacks or rendering branches.
 - Freeze each generated menu while the user selects an item. After an executed
   action, invalidate the shared snapshot, rebuild the current submenu, and
   select its first item. Back returns one menu level or exits root action mode.
+- After a service action, poll only that service at one-second intervals for at
+  most 10 seconds while it is `STARTING` or `STOPPING`, then invalidate the
+  shared snapshot and rebuild the submenu. Regenerate a parent menu when Back
+  returns to it; never restore stale service-state labels.
 - Show `R:n` only when the restart count is greater than one. A failed service
   or at least three restarts adds `/!\` to the screen title.
 - Network and managed-service snapshots may be reused for up to 10 seconds.

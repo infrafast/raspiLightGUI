@@ -2,7 +2,7 @@
 
 import subprocess
 
-from managed_services import ServiceDefinition
+from managed_services import SERVICES_BY_KEY, ServiceDefinition
 
 
 def _run(
@@ -27,6 +27,15 @@ def _run(
 
 def run_service_action(service: ServiceDefinition, action: str) -> str:
     """Run a declared service wrapper and return a compact semantic result."""
+    if action == "start" and service.depends_on:
+        # Import lazily to keep service declarations independent from probes.
+        from system_info import managed_service_states
+
+        states = managed_service_states(max_age=0.0)
+        for dependency_key in service.depends_on:
+            dependency = SERVICES_BY_KEY[dependency_key]
+            if states[dependency_key].runtime != "UP":
+                return f"Start {dependency.label} first"
     past_tense = {
         "start": "started",
         "stop": "stopped",
