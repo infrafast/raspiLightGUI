@@ -120,6 +120,9 @@ class DashboardPresenter:
             title = self.screen.title + (" /!\\" if alert else "")
             self.display(title, lines)
         else:
+            if not self.action_mode:
+                self.display(self.screen.title, ["OK=enter menu"])
+                return
             visible_count = 5
             max_start = max(0, len(self.screen.items) - visible_count)
             window_start = min(max(self.item_index - visible_count + 1, 0), max_start)
@@ -134,8 +137,8 @@ class DashboardPresenter:
 
     def move_screen(self, offset: int):
         self.screen_index = (self.screen_index + offset) % len(SCREENS)
-        self.action_mode = isinstance(self.screen, ActionScreen)
-        self.item_index = self.screen.default_index if self.action_mode else 0
+        self.action_mode = False
+        self.item_index = 0
         self.render()
 
     def move_action(self, offset: int):

@@ -99,8 +99,12 @@ callback rather than embedding system calls in rendering code.
   vertical spacing must remain fixed. Console lines are truncated with `...`.
 - Content begins two pixels below the title layout while the title position is
   unchanged.
-- `Back` is the default item in the `SYSTEM` action menu. Confirmation defaults
-  to `Cancel`.
+- An `ActionScreen` must initially behave like an information screen for
+  navigation: Up/Down changes screens, no item is selected, and its only body
+  line is `OK=enter menu`.
+- OK explicitly activates an action screen's item list. `Back` is its default
+  selected item, and action mode remains active until the user selects and
+  confirms `Back`. Confirmation dialogs default to `Cancel`.
 
 ### Monitoring
 

@@ -121,13 +121,19 @@ On information pages:
 
 - Down / Back: next page;
 - Up / Next: previous page;
-- OK on `SYSTEM`: enter its action list.
+
+The inactive `SYSTEM` page behaves like every other page: Up and Down continue
+scrolling through the screens. It displays `OK=enter menu`; press OK only when
+you want to activate its selectable action list.
 
 In the action list:
 
 - Down or Up: change selection;
 - OK: confirm the selected action;
-- Back: return to page navigation.
+- select `Back` and press OK to leave the menu and return to screen navigation.
+
+The action list remains active until `Back` is confirmed. `Back` is selected by
+default whenever the menu is entered.
 
 The OLED sleeps after five minutes without input. The first button press wakes
 it without navigating or executing an action.
