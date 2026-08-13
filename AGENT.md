@@ -150,6 +150,8 @@ per-service callbacks or rendering branches.
   Enabled services expose `Manual` (internally the wrapper's `noauto` command),
   disabled services expose Auto, and an unknown enablement state (including
   masked/static units) exposes no service action.
+- Service Stop and Manual actions require confirmation. Service Start, Restart,
+  and Auto execute immediately. Reboot and Shutdown always require confirmation.
 - Freeze each generated menu while the user selects an item. After an executed
   action, invalidate the shared snapshot, rebuild the current submenu, and
   select its first item. Back returns one menu level or exits root action mode.

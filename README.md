@@ -104,8 +104,10 @@ a contextual submenu that can:
 confirmation. `Back` returns from a service submenu to `SYSTEM`, then from
 `SYSTEM` to screen navigation.
 
-Actions require confirmation and display a short success or failure message.
-The first menu item is selected when a menu opens. Confirmation cancellation
+Stopping a service, switching it to `Manual`, rebooting, and shutting down
+require confirmation. Starting, restarting, and switching a service to `Auto`
+run immediately. Every action displays a short success or failure message. The
+first menu item is selected when a menu opens, while confirmation cancellation
 remains selected by default.
 If a service state or startup mode is unavailable, potentially unsafe actions
 are omitted. Statuses stop refreshing while a menu is active, so an item cannot

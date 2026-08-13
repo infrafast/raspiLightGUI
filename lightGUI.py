@@ -74,7 +74,7 @@ def service_action_menu(service: ServiceDefinition) -> ActionMenu:
             ActionItem(
                 f"{action.title()} {service.label}",
                 partial(run_service_action, service, action),
-                confirm=True,
+                confirm=action == "stop",
             )
         )
     if status.enabled is True:
@@ -90,7 +90,7 @@ def service_action_menu(service: ServiceDefinition) -> ActionMenu:
             ActionItem(
                 "Auto",
                 partial(run_service_action, service, "auto"),
-                confirm=True,
+                confirm=False,
             )
         )
     items.append(ActionItem("Back"))
