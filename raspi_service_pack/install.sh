@@ -8,7 +8,6 @@ APP_UNIT=raspilightgui.service
 service_user=${SUDO_USER:-pi}
 check_only=false
 required_commands=(apt-get systemctl)
-packaged_commands=(pgrep)
 required_imports=(adafruit_ssd1306 board busio gpiozero lgpio PIL psutil)
 
 usage() {
@@ -41,15 +40,6 @@ report_preflight() {
       fail "required command '$command_name' is missing"
     fi
   done
-  for command_name in "${packaged_commands[@]}"; do
-    if command -v "$command_name" >/dev/null 2>&1; then
-      echo "  OK      command: $command_name"
-    else
-      echo "  MISSING command: $command_name (installed during setup)"
-      missing=true
-    fi
-  done
-
   if command -v python3 >/dev/null 2>&1; then
     if ! python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
       fail "Python 3.11 or newer is required"
@@ -134,7 +124,6 @@ apt-get update
 apt-get install -y \
   fonts-dejavu-core \
   i2c-tools \
-  procps \
   python3 \
   python3-pip \
   python3-venv \
@@ -196,25 +185,27 @@ PY
 chmod 0644 "/etc/systemd/system/$APP_UNIT"
 systemd-analyze verify "/etc/systemd/system/$APP_UNIT"
 
-python3 - "/etc/sudoers.d/raspilightgui-service" "$service_user" <<'PY'
+python3 - "/etc/sudoers.d/raspilightgui-service" "$service_user" "$REPO_ROOT" <<'PY'
 import pathlib
 import sys
 
-path, user = sys.argv[1:]
-commands = (
+path, user, repository = sys.argv[1:]
+sys.path.insert(0, repository)
+from managed_services import MANAGED_SERVICES
+
+commands = [
     "/usr/bin/systemctl start raspilightgui.service",
     "/usr/bin/systemctl stop raspilightgui.service",
     "/usr/bin/systemctl restart raspilightgui.service",
     "/usr/bin/systemctl enable --now raspilightgui.service",
     "/usr/bin/systemctl disable raspilightgui.service",
-    "/usr/bin/systemctl restart livestageassistant.service",
-    "/usr/bin/systemctl start livestageassistant.service",
-    "/usr/bin/systemctl stop livestageassistant.service",
-    "/usr/bin/systemctl restart oculizer.service",
-    "/usr/bin/systemctl start oculizer.service",
-    "/usr/bin/systemctl stop oculizer.service",
     "/usr/bin/systemctl poweroff",
-)
+]
+for service in MANAGED_SERVICES:
+    commands.extend(
+        f"/usr/bin/systemctl {action} {service.unit}"
+        for action in ("start", "stop", "restart")
+    )
 text = "Cmnd_Alias RASPILIGHTGUI_SERVICE = " + ", ".join(commands) + "\n"
 text += f"{user} ALL=(root) NOPASSWD: RASPILIGHTGUI_SERVICE\n"
 pathlib.Path(path).write_text(text, encoding="utf-8")

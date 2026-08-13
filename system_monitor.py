@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 import socket
-import subprocess
 from threading import Lock
 import time
 
@@ -18,8 +17,6 @@ class NetworkState:
 
 _network_lock = Lock()
 _network_snapshot: tuple[float, NetworkState] | None = None
-_process_lock = Lock()
-_process_snapshots: dict[str, tuple[float, bool | None]] = {}
 
 
 def wired_interfaces(names=None) -> list[str]:
@@ -66,25 +63,3 @@ def network_state(max_age: float = 0.0) -> NetworkState:
         state = _read_network_state()
         _network_snapshot = (now, state)
         return state
-
-
-def process_running(pattern: str, max_age: float = 0.0) -> bool | None:
-    """Return process presence via pgrep, or None when the probe cannot run."""
-    with _process_lock:
-        now = time.monotonic()
-        snapshot = _process_snapshots.get(pattern)
-        if max_age > 0 and snapshot and now - snapshot[0] <= max_age:
-            return snapshot[1]
-        try:
-            result = subprocess.run(
-                ["pgrep", "-f", pattern],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=2,
-                check=False,
-            )
-            running = result.returncode == 0
-        except (OSError, subprocess.TimeoutExpired):
-            running = None
-        _process_snapshots[pattern] = (now, running)
-        return running

@@ -2,21 +2,14 @@
 
 import argparse
 from dataclasses import dataclass
+from functools import partial
 import signal
 from threading import Event
 import time
 from typing import Callable
 
-from system_actions import (
-    restart_assistant,
-    restart_oculizer,
-    restart_qlcplus,
-    shutdown_pi,
-    start_assistant,
-    start_oculizer,
-    stop_assistant,
-    stop_oculizer,
-)
+from managed_services import MANAGED_SERVICES
+from system_actions import run_service_action, shutdown_pi
 from system_info import (
     ScreenData,
     invalidate_service_states,
@@ -59,35 +52,33 @@ def system_action_items() -> tuple[ActionItem, ...]:
     """Build safe actions from the service-state snapshot shared with the UI."""
     states = managed_service_states()
     items: list[ActionItem] = []
-    services = (
-        (
-            "Assistant",
-            states["ASSISTANT"][0],
-            start_assistant,
-            stop_assistant,
-            restart_assistant,
-        ),
-        (
-            "Oculizer",
-            states["OCULIZER"][0],
-            start_oculizer,
-            stop_oculizer,
-            restart_oculizer,
-        ),
-    )
-    for label, state, start, stop, restart in services:
+    for service in MANAGED_SERVICES:
+        state = states[service.key][0]
         if state in ("AUTO", "MANUAL", "STARTING"):
             items.extend(
                 (
-                    ActionItem(f"Stop {label}", stop, confirm=True),
-                    ActionItem(f"Restart {label}", restart, confirm=True),
+                    ActionItem(
+                        f"Stop {service.label}",
+                        partial(run_service_action, service, "stop"),
+                        confirm=True,
+                    ),
+                    ActionItem(
+                        f"Restart {service.label}",
+                        partial(run_service_action, service, "restart"),
+                        confirm=True,
+                    ),
                 )
             )
         elif state in ("DOWN", "FAILED", "STOPPING"):
-            items.append(ActionItem(f"Start {label}", start, confirm=True))
+            items.append(
+                ActionItem(
+                    f"Start {service.label}",
+                    partial(run_service_action, service, "start"),
+                    confirm=True,
+                )
+            )
     items.extend(
         (
-            ActionItem("Restart QLC+", restart_qlcplus, confirm=True),
             ActionItem(
                 "Shutdown",
                 shutdown_pi,

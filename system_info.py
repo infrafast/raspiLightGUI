@@ -8,7 +8,8 @@ import re
 
 import psutil
 
-from system_monitor import network_state, process_running
+from managed_services import MANAGED_SERVICES
+from system_monitor import network_state
 
 
 POWER_OK_VOLTS = 4.80
@@ -19,10 +20,6 @@ TEMP_HIGH_C = 70.0
 TEMP_CRITICAL_C = 80.0
 SERVICE_RESTART_ALERT = 3
 SERVICE_STATE_MAX_AGE = 10.0
-MANAGED_SERVICES = {
-    "OCULIZER": "oculizer.service",
-    "ASSISTANT": "livestageassistant.service",
-}
 _service_state_lock = Lock()
 _service_state_snapshot: tuple[float, dict[str, tuple[str, int]]] | None = None
 
@@ -169,13 +166,6 @@ def _systemd_info(service: str) -> tuple[str, int]:
     return status, restarts
 
 
-def _process_status(pattern: str) -> str:
-    running = process_running(pattern, max_age=10.0)
-    if running is None:
-        return "UNKNOWN"
-    return "UP" if running else "DOWN"
-
-
 def _managed_service_info(service: str) -> tuple[str, int]:
     """Return runtime/boot mode and restart count for a systemd service."""
     active, restarts = _systemd_info(service)
@@ -207,8 +197,8 @@ def managed_service_states(
         ):
             return dict(_service_state_snapshot[1])
         states = {
-            label: _managed_service_info(unit)
-            for label, unit in MANAGED_SERVICES.items()
+            service.key: _managed_service_info(service.unit)
+            for service in MANAGED_SERVICES
         }
         _service_state_snapshot = (now, states)
         return dict(states)
@@ -228,21 +218,16 @@ def _service_line(label: str, state: str, restarts: int) -> str:
 
 
 def service_content() -> ScreenData:
-    """Return current systemd/process states without invoking a shell."""
+    """Return the states of all declared systemd services."""
     states = managed_service_states()
-    oculizer_state, oculizer_restarts = states["OCULIZER"]
-    assistant_state, assistant_restarts = states["ASSISTANT"]
-    alert = (
-        oculizer_state == "FAILED"
-        or assistant_state == "FAILED"
-        or oculizer_restarts >= SERVICE_RESTART_ALERT
-        or assistant_restarts >= SERVICE_RESTART_ALERT
+    alert = any(
+        state == "FAILED" or restarts >= SERVICE_RESTART_ALERT
+        for state, restarts in states.values()
     )
     return ScreenData(
         lines=[
-            _service_line("OCULIZER", oculizer_state, oculizer_restarts),
-            _service_line("ASSISTANT", assistant_state, assistant_restarts),
-            f"QLC+: {_process_status('qlcplus-qml')}",
+            _service_line(service.key, *states[service.key])
+            for service in MANAGED_SERVICES
         ],
         alert=alert,
     )

@@ -48,8 +48,6 @@
   buttons; the GPIO LED remains real.
 - The LED must continue operating when the OLED is absent. In that case the
   dashboard uses a headless backend and must not perform invisible OLED probes.
-- Keep `pgrep -f qlcplus-qml` as the QLC+ presence check unless the requirement
-  is explicitly changed.
 - The LED monitor checks only wired Ethernet and QLC+. It must not monitor
   Oculizer, Live Stage Assistant, or future systemd services.
 - Do not add command-line modes for forcing or testing individual LED channels.
@@ -62,9 +60,11 @@
   process lifecycle, signals, and LED-worker orchestration.
 - `ui_backends.py`: OLED, terminal, and headless view/input adapters.
 - `system_info.py`: OLED information providers and service-state presentation.
-- `system_actions.py`: privileged and process-control action callbacks. Actions
+- `system_actions.py`: generic privileged service and system action callbacks. Actions
   return short semantic result strings suitable for the OLED.
-- `system_monitor.py`: shared, thread-safe, low-cost network and process probes.
+- `system_monitor.py`: shared, thread-safe, low-cost wired-network probe.
+- `managed_services.py`: the single ordered declaration of managed service
+  labels, systemd units, and wrapper paths.
 - `gpio_devices.py`: all BCM assignments and GPIO Zero button/LED devices.
 - `status_led.py`: LED policy and its interruptible background worker.
 - `raspi_service_pack/install.sh`: read-only preflight and permanent installer.
@@ -72,9 +72,9 @@
 - `raspi_service_pack/raspilightgui-service`: installed administration client.
 
 Keep presentation, input, probes, GPIO ownership, and policy separated. Put a
-new reusable probe in `system_monitor.py`; do not duplicate it in OLED and LED
-code. Add new OLED information through a provider and new actions through a
-callback rather than embedding system calls in rendering code.
+new reusable non-service probe in `system_monitor.py`; do not duplicate probes
+in OLED and LED code. Add a managed service only in `MANAGED_SERVICES`, not with
+per-service callbacks or rendering branches.
 
 ## Behavioural invariants
 
@@ -113,22 +113,25 @@ callback rather than embedding system calls in rendering code.
   or above 80 C.
 - Input voltage: `OK` at or above 4.80 V, `LOW` above 4.65 V and below 4.80 V,
   and `CRIT` at or below 4.65 V or when current undervoltage is reported.
-- Oculizer and Live Stage Assistant share the same systemd state algorithm:
+- QLC+, Oculizer, and Live Stage Assistant share the same systemd state
+  algorithm and appear in that order:
   running and enabled is `AUTO`; running and disabled is `MANUAL`; transitional,
   inactive, failed, and unreadable states remain distinct.
 - `SERVICE STATE` and `SYSTEM` must consume the same managed-service snapshot,
   cached for at most 10 seconds. Refresh it when stale on entry to `SYSTEM`, and
   invalidate it after an executed action.
+- Generate service lines, alerts, and actions by iterating only over
+  `MANAGED_SERVICES`; do not add per-service monitoring or action functions.
 - Build managed-service actions dynamically: `AUTO`, `MANUAL`, and `STARTING`
   expose Stop then Restart; `DOWN`, `FAILED`, and `STOPPING` expose Start;
-  `UNKNOWN` exposes no action. QLC+, Shutdown, and Back remain fixed actions.
+  `UNKNOWN` exposes no action. Shutdown and Back remain fixed actions.
 - Freeze the generated item tuple while action mode is active so asynchronous
   service transitions never move an item under the cursor. Rebuild it after an
   executed action and select `Back` again.
 - Show `R:n` only when the restart count is greater than one. A failed service
   or at least three restarts adds `/!\` to the screen title.
-- Network and process snapshots may be reused by the OLED for up to 10 seconds.
-  The LED requests fresh data at its own phase boundaries.
+- Network and managed-service snapshots may be reused for up to 10 seconds.
+  LED phases keep their visual cadence while consuming these shared snapshots.
 
 ### LED
 
@@ -140,8 +143,7 @@ callback rather than embedding system calls in rendering code.
 - Blink states use 250 ms on and 250 ms off.
 - Ethernet: link plus IPv4 is solid blue; link without IPv4 blinks blue; no link
   leaves blue off.
-- QLC+: a running `qlcplus-qml` is solid green; absent or unreadable blinks
-  green.
+- QLC+: `AUTO` or `MANUAL` is solid green; every other state blinks green.
 - Waits must remain interruptible. Always turn software channels off and close
   GPIO devices on process exit or worker failure.
 - A fatal LED worker error must stop the main loop so systemd can restart the
@@ -158,7 +160,7 @@ incompatibilities.
 The permanent installer must:
 
 - require root and remain non-interactive;
-- install Python, venv, pip, GPIO Zero, `lgpio`, `procps`, I2C tools, sudo, and
+- install Python, venv, pip, GPIO Zero, `lgpio`, I2C tools, sudo, and
   the required font through APT;
 - enable I2C through `raspi-config` when it is available;
 - create `.venv` with `--system-site-packages` and install `requirements.txt`;
@@ -167,6 +169,8 @@ The permanent installer must:
 - verify runtime imports as the service account;
 - generate the administration client, systemd unit, and narrowly scoped
   passwordless sudo rules;
+- derive managed-service sudo rules from `MANAGED_SERVICES`, never from a second
+  hand-maintained list;
 - validate systemd and sudoers output before reloading systemd;
 - not enable or start the service automatically.
 

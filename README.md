@@ -36,8 +36,8 @@ Power states:
 
 ### SERVICE STATE
 
-The page shows `oculizer.service`, `livestageassistant.service`, and the
-`qlcplus-qml` application.
+The page shows `qlcplus.service`, `oculizer.service`, and
+`livestageassistant.service`, in that order.
 
 | State | Meaning |
 |---|---|
@@ -56,9 +56,8 @@ a failed service, repeated restarts, critical temperature, or critical power.
 
 The action page can:
 
-- stop or restart a running/starting Live Stage Assistant or Oculizer service;
-- start either service when it is stopped, failed, or stopping;
-- restart QLC+;
+- stop or restart any running/starting managed service;
+- start any managed service when it is stopped, failed, or stopping;
 - shut down the Raspberry Pi safely;
 - return to the screen list with `Back`.
 
@@ -78,8 +77,8 @@ heartbeat:
 | Ethernet | Link and IPv4 address | Solid blue, appearing magenta with red |
 | Ethernet | Link without IPv4 | Blinking blue/magenta |
 | Ethernet | No link | Blue off; red only |
-| QLC+ | `qlcplus-qml` running | Solid green, appearing yellow with red |
-| QLC+ | Not running | Blinking green/yellow |
+| QLC+ | Service running | Solid green, appearing yellow with red |
+| QLC+ | Service not running | Blinking green/yellow |
 
 Each Ethernet and QLC+ phase lasts about 1.5 seconds. Blink states alternate
 every 250 ms. The LED continues working when the OLED is disconnected or asleep.
@@ -143,6 +142,11 @@ The OLED sleeps after five minutes without input. The first button press wakes
 it without navigating or executing an action.
 
 ## Installation
+
+Install and configure the managed applications before raspiLightGUI. In
+particular, QLC+ must be provided as `qlcplus.service` with the
+`qlcplus-service` command from
+[raspi5rackSetup](https://github.com/infrafast/raspi5rackSetup).
 
 ### 1. Preflight
 
