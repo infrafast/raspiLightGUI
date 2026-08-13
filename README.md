@@ -123,7 +123,8 @@ On information pages:
 - Up / Next: previous page;
 
 The inactive `SYSTEM` page behaves like every other page: Up and Down continue
-scrolling through the screens. It displays `OK=enter menu`; press OK only when
+scrolling through the screens. It shows the action-menu preview without a
+selection cursor, with `OK = enter menu` in place of `Back`. Press OK only when
 you want to activate its selectable action list.
 
 In the action list:

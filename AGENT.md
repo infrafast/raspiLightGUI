@@ -100,8 +100,9 @@ callback rather than embedding system calls in rendering code.
 - Content begins two pixels below the title layout while the title position is
   unchanged.
 - An `ActionScreen` must initially behave like an information screen for
-  navigation: Up/Down changes screens, no item is selected, and its only body
-  line is `OK=enter menu`.
+  navigation: Up/Down changes screens and no item is selected. It still renders
+  the same five-line menu window, but replaces the visible `Back` label with
+  `OK = enter menu` while inactive.
 - OK explicitly activates an action screen's item list. `Back` is its default
   selected item, and action mode remains active until the user selects and
   confirms `Back`. Confirmation dialogs default to `Cancel`.
