@@ -199,12 +199,19 @@ commands = [
     "/usr/bin/systemctl restart raspilightgui.service",
     "/usr/bin/systemctl enable --now raspilightgui.service",
     "/usr/bin/systemctl disable raspilightgui.service",
+    "/usr/bin/systemctl reboot",
     "/usr/bin/systemctl poweroff",
 ]
 for service in MANAGED_SERVICES:
     commands.extend(
         f"/usr/bin/systemctl {action} {service.unit}"
         for action in ("start", "stop", "restart")
+    )
+    commands.extend(
+        (
+            f"/usr/bin/systemctl enable --now {service.unit}",
+            f"/usr/bin/systemctl disable {service.unit}",
+        )
     )
 text = "Cmnd_Alias RASPILIGHTGUI_SERVICE = " + ", ".join(commands) + "\n"
 text += f"{user} ALL=(root) NOPASSWD: RASPILIGHTGUI_SERVICE\n"

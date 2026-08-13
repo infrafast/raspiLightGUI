@@ -21,13 +21,32 @@ TEMP_CRITICAL_C = 80.0
 SERVICE_RESTART_ALERT = 3
 SERVICE_STATE_MAX_AGE = 10.0
 _service_state_lock = Lock()
-_service_state_snapshot: tuple[float, dict[str, tuple[str, int]]] | None = None
+_service_state_snapshot: tuple[float, dict[str, "ServiceStatus"]] | None = None
 
 
 @dataclass(frozen=True)
 class ScreenData:
     lines: list[str]
     alert: bool = False
+
+
+@dataclass(frozen=True)
+class ServiceStatus:
+    runtime: str
+    enabled: bool | None
+    restarts: int
+
+    @property
+    def display_state(self) -> str:
+        if self.runtime == "UP":
+            if self.enabled is True:
+                return "AUTO"
+            if self.enabled is False:
+                return "MANUAL"
+            return "UNKNOWN"
+        if self.enabled is True and self.runtime != "UNKNOWN":
+            return f"{self.runtime} AUTO"
+        return self.runtime
 
 
 def _temperature_info() -> tuple[float | None, str]:
@@ -166,25 +185,33 @@ def _systemd_info(service: str) -> tuple[str, int]:
     return status, restarts
 
 
-def _managed_service_info(service: str) -> tuple[str, int]:
+def _managed_service_info(service: str) -> ServiceStatus:
     """Return runtime/boot mode and restart count for a systemd service."""
-    active, restarts = _systemd_info(service)
-    if active != "UP":
-        return active, restarts
+    runtime, restarts = _systemd_info(service)
     try:
-        enabled = subprocess.run(
-            ["systemctl", "is-enabled", "--quiet", service],
+        result = subprocess.run(
+            ["systemctl", "is-enabled", service],
+            capture_output=True,
+            text=True,
             timeout=3,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return "UNKNOWN", restarts
-    return ("AUTO" if enabled.returncode == 0 else "MANUAL"), restarts
+        enabled = None
+    else:
+        enabled_state = result.stdout.strip().lower()
+        if enabled_state in ("enabled", "enabled-runtime"):
+            enabled = True
+        elif enabled_state == "disabled":
+            enabled = False
+        else:
+            enabled = None
+    return ServiceStatus(runtime, enabled, restarts)
 
 
 def managed_service_states(
     max_age: float = SERVICE_STATE_MAX_AGE,
-) -> dict[str, tuple[str, int]]:
+) -> dict[str, ServiceStatus]:
     """Return one shared, bounded-age snapshot of all managed services."""
     global _service_state_snapshot
 
@@ -212,21 +239,21 @@ def invalidate_service_states():
         _service_state_snapshot = None
 
 
-def _service_line(label: str, state: str, restarts: int) -> str:
-    suffix = f" R:{restarts}" if restarts > 1 else ""
-    return f"{label}: {state}{suffix}"
+def _service_line(label: str, status: ServiceStatus) -> str:
+    suffix = f" R:{status.restarts}" if status.restarts > 1 else ""
+    return f"{label}: {status.display_state}{suffix}"
 
 
 def service_content() -> ScreenData:
     """Return the states of all declared systemd services."""
     states = managed_service_states()
     alert = any(
-        state == "FAILED" or restarts >= SERVICE_RESTART_ALERT
-        for state, restarts in states.values()
+        status.runtime == "FAILED" or status.restarts >= SERVICE_RESTART_ALERT
+        for status in states.values()
     )
     return ScreenData(
         lines=[
-            _service_line(service.key, *states[service.key])
+            _service_line(service.key, states[service.key])
             for service in MANAGED_SERVICES
         ],
         alert=alert,

@@ -27,7 +27,13 @@ def _run(
 
 def run_service_action(service: ServiceDefinition, action: str) -> str:
     """Run a declared service wrapper and return a compact semantic result."""
-    past_tense = {"start": "started", "stop": "stopped", "restart": "restarted"}
+    past_tense = {
+        "start": "started",
+        "stop": "stopped",
+        "restart": "restarted",
+        "auto": "set auto",
+        "noauto": "set manual",
+    }
     return _run(
         [service.wrapper, action],
         f"{service.label} {past_tense[action]}",
@@ -41,5 +47,15 @@ def shutdown_pi() -> str:
         ["sudo", "-n", "systemctl", "poweroff"],
         "Shutdown requested",
         "Shutdown failed",
+        timeout=5,
+    )
+
+
+def reboot_pi() -> str:
+    # -n prevents the UI from hanging on an interactive sudo password prompt.
+    return _run(
+        ["sudo", "-n", "systemctl", "reboot"],
+        "Reboot requested",
+        "Reboot failed",
         timeout=5,
     )

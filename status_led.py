@@ -14,7 +14,7 @@ BLINK_INTERVAL = 0.25
 
 def qlcplus_running() -> bool:
     """Reuse the shared systemd snapshot used by the OLED service page."""
-    return managed_service_states()["QLC+"][0] in ("AUTO", "MANUAL")
+    return managed_service_states()["QLC+"].runtime == "UP"
 
 
 class StatusLedController:

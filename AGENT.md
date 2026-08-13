@@ -117,17 +117,25 @@ per-service callbacks or rendering branches.
   algorithm and appear in that order:
   running and enabled is `AUTO`; running and disabled is `MANUAL`; transitional,
   inactive, failed, and unreadable states remain distinct.
+- Store runtime state and boot-enabled state separately in `ServiceStatus`.
+  Query `is-enabled` even when a service is not running. Append `AUTO` to a
+  non-running display state when boot startup is enabled.
 - `SERVICE STATE` and `SYSTEM` must consume the same managed-service snapshot,
   cached for at most 10 seconds. Refresh it when stale on entry to `SYSTEM`, and
   invalidate it after an executed action.
 - Generate service lines, alerts, and actions by iterating only over
   `MANAGED_SERVICES`; do not add per-service monitoring or action functions.
-- Build managed-service actions dynamically: `AUTO`, `MANUAL`, and `STARTING`
-  expose Stop then Restart; `DOWN`, `FAILED`, and `STOPPING` expose Start;
-  `UNKNOWN` exposes no action. Shutdown and Back remain fixed actions.
-- Freeze the generated item tuple while action mode is active so asynchronous
-  service transitions never move an item under the cursor. Rebuild it after an
-  executed action and select `Back` again.
+- Keep the root `SYSTEM` menu to one item per declared service, followed by
+  Reboot, Shutdown, and Back. A service item opens exactly one contextual
+  submenu; do not add service screens to the main carousel.
+- In a service submenu, `UP` and `STARTING` expose Stop then Restart; `DOWN`,
+  `FAILED`, and `STOPPING` expose Start; `UNKNOWN` exposes no runtime action.
+  Enabled services expose `Manual` (internally the wrapper's `noauto` command),
+  disabled services expose Auto, and an unknown enablement state (including
+  masked/static units) exposes no service action.
+- Freeze each generated menu while the user selects an item. After an executed
+  action, invalidate the shared snapshot, rebuild the current submenu, and
+  select its Back item. Back returns one menu level or exits root action mode.
 - Show `R:n` only when the restart count is greater than one. A failed service
   or at least three restarts adds `/!\` to the screen title.
 - Network and managed-service snapshots may be reused for up to 10 seconds.

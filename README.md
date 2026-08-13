@@ -49,22 +49,30 @@ The page shows `qlcplus.service`, `oculizer.service`, and
 | `FAILED` | Service failure |
 | `UNKNOWN` | State unavailable |
 
+An automatic service that is not currently running adds `AUTO` to its runtime
+state, for example `DOWN AUTO` or `FAILED AUTO`.
+
 `R:n` appears after more than one service restart. `/!\` in the title indicates
 a failed service, repeated restarts, critical temperature, or critical power.
 
 ### SYSTEM
 
-The action page can:
+The main action page contains one entry per service, followed by `Reboot`,
+`Shutdown`, and `Back`. Selecting QLC+, Oculizer, or Assistant opens a
+contextual submenu that can:
 
-- stop or restart any running/starting managed service;
-- start any managed service when it is stopped, failed, or stopping;
-- shut down the Raspberry Pi safely;
-- return to the screen list with `Back`.
+- stop or restart the service when it is running or starting;
+- start it when it is stopped, failed, or stopping;
+- select `Auto` to enable startup at boot, or `Manual` to disable it.
+
+`Reboot` and `Shutdown` remain in the main `SYSTEM` menu and require
+confirmation. `Back` returns from a service submenu to `SYSTEM`, then from
+`SYSTEM` to screen navigation.
 
 Actions require confirmation and display a short success or failure message.
 `Back` and confirmation cancellation are selected by default.
-Services whose state is unavailable are omitted from the action list. The menu
-is updated from the same service states shown on `SERVICE STATE`, but remains
+If a service state or startup mode is unavailable, potentially unsafe actions
+are omitted. Menus use the same states shown on `SERVICE STATE`, but remain
 stable while you are selecting an item.
 
 ## RGB status LED
@@ -132,7 +140,9 @@ you want to activate its selectable action list.
 In the action list:
 
 - Down or Up: change selection;
-- OK: confirm the selected action;
+- OK on a service: open its contextual submenu;
+- OK on an action: open its confirmation;
+- `Back` inside a service submenu: return to the main `SYSTEM` menu;
 - select `Back` and press OK to leave the menu and return to screen navigation.
 
 The action list remains active until `Back` is confirmed. `Back` is selected by

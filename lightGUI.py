@@ -8,8 +8,8 @@ from threading import Event
 import time
 from typing import Callable
 
-from managed_services import MANAGED_SERVICES
-from system_actions import run_service_action, shutdown_pi
+from managed_services import MANAGED_SERVICES, ServiceDefinition
+from system_actions import reboot_pi, run_service_action, shutdown_pi
 from system_info import (
     ScreenData,
     invalidate_service_states,
@@ -37,6 +37,7 @@ class InfoScreen:
 class ActionItem:
     label: str
     callback: ActionCallback | None = None
+    submenu: Callable[[], "ActionMenu"] | None = None
     confirm: bool = False
     progress_message: str = "Working..."
     terminal: bool = False
@@ -45,40 +46,73 @@ class ActionItem:
 @dataclass(frozen=True)
 class ActionScreen:
     title: str
-    items: Callable[[], tuple[ActionItem, ...]]
+    menu: Callable[[], "ActionMenu"]
 
 
-def system_action_items() -> tuple[ActionItem, ...]:
-    """Build safe actions from the service-state snapshot shared with the UI."""
-    states = managed_service_states()
+@dataclass(frozen=True)
+class ActionMenu:
+    title: str
+    items: tuple[ActionItem, ...]
+
+
+def service_action_menu(service: ServiceDefinition) -> ActionMenu:
+    """Build one contextual service submenu from the shared state snapshot."""
+    status = managed_service_states()[service.key]
     items: list[ActionItem] = []
-    for service in MANAGED_SERVICES:
-        state = states[service.key][0]
-        if state in ("AUTO", "MANUAL", "STARTING"):
-            items.extend(
-                (
-                    ActionItem(
-                        f"Stop {service.label}",
-                        partial(run_service_action, service, "stop"),
-                        confirm=True,
-                    ),
-                    ActionItem(
-                        f"Restart {service.label}",
-                        partial(run_service_action, service, "restart"),
-                        confirm=True,
-                    ),
-                )
+    if status.enabled is None:
+        actions = ()
+    elif status.runtime in ("UP", "STARTING"):
+        actions = ("stop", "restart")
+    elif status.runtime in ("DOWN", "FAILED", "STOPPING"):
+        actions = ("start",)
+    else:
+        actions = ()
+    for action in actions:
+        items.append(
+            ActionItem(
+                f"{action.title()} {service.label}",
+                partial(run_service_action, service, action),
+                confirm=True,
             )
-        elif state in ("DOWN", "FAILED", "STOPPING"):
-            items.append(
-                ActionItem(
-                    f"Start {service.label}",
-                    partial(run_service_action, service, "start"),
-                    confirm=True,
-                )
+        )
+    if status.enabled is True:
+        items.append(
+            ActionItem(
+                "Manual",
+                partial(run_service_action, service, "noauto"),
+                confirm=True,
             )
+        )
+    elif status.enabled is False:
+        items.append(
+            ActionItem(
+                "Auto",
+                partial(run_service_action, service, "auto"),
+                confirm=True,
+            )
+        )
+    items.append(ActionItem("Back"))
+    return ActionMenu(f"{service.label} {status.display_state}", tuple(items))
+
+
+def system_action_menu() -> ActionMenu:
+    """Build the compact root menu from the single service declaration."""
+    items: list[ActionItem] = [
+        ActionItem(
+            service.label,
+            submenu=partial(service_action_menu, service),
+        )
+        for service in MANAGED_SERVICES
+    ]
     items.extend(
         (
+            ActionItem(
+                "Reboot",
+                reboot_pi,
+                confirm=True,
+                progress_message="Rebooting...",
+                terminal=True,
+            ),
             ActionItem(
                 "Shutdown",
                 shutdown_pi,
@@ -89,7 +123,7 @@ def system_action_items() -> tuple[ActionItem, ...]:
             ActionItem("Back"),
         )
     )
-    return tuple(items)
+    return ActionMenu("SYSTEM", tuple(items))
 
 
 # Model: add screens and plug regular Python callables into this registry.
@@ -98,7 +132,7 @@ SCREENS = (
     InfoScreen("SERVICE STATE", service_content),
     ActionScreen(
         "SYSTEM",
-        system_action_items,
+        system_action_menu,
     ),
 )
 
@@ -112,7 +146,11 @@ class DashboardPresenter:
         self.screen_index = 0
         self.item_index = 0
         self.action_mode = False
-        self.action_items: tuple[ActionItem, ...] = ()
+        self.action_menu: ActionMenu | None = None
+        self.menu_provider: Callable[[], ActionMenu] | None = None
+        self.menu_stack: list[
+            tuple[ActionMenu, Callable[[], ActionMenu], int]
+        ] = []
         self.last_refresh = 0.0
         self.last_activity = time.monotonic()
         self.sleep_seconds = sleep_seconds
@@ -150,14 +188,15 @@ class DashboardPresenter:
             title = self.screen.title + (" /!\\" if alert else "")
             self.display(title, lines)
         else:
-            if not self.action_items:
-                self.refresh_action_items()
+            if self.action_menu is None:
+                self.refresh_action_menu()
+            action_menu = self.action_menu
             visible_count = 5
-            default_index = len(self.action_items) - 1
+            default_index = len(action_menu.items) - 1
             display_index = self.item_index if self.action_mode else default_index
-            max_start = max(0, len(self.action_items) - visible_count)
+            max_start = max(0, len(action_menu.items) - visible_count)
             window_start = min(max(display_index - visible_count + 1, 0), max_start)
-            visible_items = self.action_items[
+            visible_items = action_menu.items[
                 window_start : window_start + visible_count
             ]
             labels = [item.label for item in visible_items]
@@ -166,7 +205,7 @@ class DashboardPresenter:
                 if 0 <= default_visible_index < len(labels):
                     labels[default_visible_index] = "OK = enter menu"
             self.display(
-                self.screen.title,
+                action_menu.title if self.action_mode else self.screen.title,
                 labels,
                 display_index - window_start if self.action_mode else None,
             )
@@ -174,21 +213,26 @@ class DashboardPresenter:
     def move_screen(self, offset: int):
         self.screen_index = (self.screen_index + offset) % len(SCREENS)
         self.action_mode = False
+        self.menu_stack.clear()
         if isinstance(self.screen, ActionScreen):
-            self.refresh_action_items()
+            self.menu_provider = self.screen.menu
+            self.refresh_action_menu()
         else:
-            self.action_items = ()
+            self.action_menu = None
+            self.menu_provider = None
             self.item_index = 0
         self.render()
 
-    def refresh_action_items(self, force: bool = False):
+    def refresh_action_menu(self, force: bool = False):
         if force:
             invalidate_service_states()
-        self.action_items = self.screen.items()
-        self.item_index = len(self.action_items) - 1
+        if self.menu_provider is None:
+            self.menu_provider = self.screen.menu
+        self.action_menu = self.menu_provider()
+        self.item_index = len(self.action_menu.items) - 1
 
     def move_action(self, offset: int):
-        self.item_index = (self.item_index + offset) % len(self.action_items)
+        self.item_index = (self.item_index + offset) % len(self.action_menu.items)
         self.render()
 
     def confirm(self, label: str) -> bool:
@@ -205,9 +249,18 @@ class DashboardPresenter:
         return False
 
     def run_action(self):
-        item = self.action_items[self.item_index]
+        item = self.action_menu.items[self.item_index]
+        if item.submenu is not None:
+            self.menu_stack.append((self.action_menu, self.menu_provider, self.item_index))
+            self.menu_provider = item.submenu
+            self.refresh_action_menu()
+            self.render()
+            return
         if item.callback is None:
-            self.action_mode = False
+            if self.menu_stack:
+                self.action_menu, self.menu_provider, self.item_index = self.menu_stack.pop()
+            else:
+                self.action_mode = False
             self.render()
             return
         if item.confirm and not self.confirm(item.label):
@@ -225,12 +278,16 @@ class DashboardPresenter:
             self.display("SYSTEM", ["Shutting down...", "Please wait"])
             while True:
                 signal.pause()
+        if item.terminal and result == "Reboot requested":
+            self.display("SYSTEM", ["Rebooting...", "Please wait"])
+            while True:
+                signal.pause()
         self.shutdown_in_progress = False
         lines = [result[index:index + 20] for index in range(0, len(result), 20)]
         self.display("RESULT", lines)
         time.sleep(2)
         self.input.discard_events()
-        self.refresh_action_items(force=True)
+        self.refresh_action_menu(force=True)
         self.render()
 
     def run(self):
@@ -269,7 +326,7 @@ class DashboardPresenter:
                     self.run_action()
                 else:
                     self.action_mode = True
-                    self.item_index = len(self.action_items) - 1
+                    self.item_index = len(self.action_menu.items) - 1
                     self.render()
             elif event == "quit":
                 self.request_stop()
