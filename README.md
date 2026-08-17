@@ -147,9 +147,9 @@ QLC+. The LED continues working when the OLED is disconnected or asleep.
 | RGB common cathode | GND | 14 | LED common cathode |
 | OLED SDA | GPIO2 | 3 | SDA |
 | OLED SCL | GPIO3 | 5 | SCL |
-| Button Down / Back | GPIO5 | 29 | Other terminal to common button GND |
+| Button Down / Back | GPI13 | 33 | Other terminal to common button GND |
 | Button Select / OK | GPIO6 | 31 | Other terminal to common button GND |
-| Button Up / Next | GPIO13 | 33 | Other terminal to common button GND |
+| Button Up / Next | GPIO05 | 29 | Other terminal to common button GND |
 | RGB blue anode | GPIO27 | 13 | Through 330 ohm resistor |
 | RGB green anode | GPIO22 | 15 | Through 330 ohm resistor |
 
