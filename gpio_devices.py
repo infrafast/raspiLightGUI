@@ -11,9 +11,9 @@ os.environ.setdefault("GPIOZERO_PIN_FACTORY", "lgpio")
 from gpiozero import Button, LED
 
 
-BUTTON_DOWN_GPIO = 5    # Physical pin 29
+BUTTON_DOWN_GPIO = 13   # Physical pin 33
 BUTTON_SELECT_GPIO = 6  # Physical pin 31
-BUTTON_UP_GPIO = 13     # Physical pin 33
+BUTTON_UP_GPIO = 5      # Physical pin 29
 BLUE_LED_GPIO = 27      # Physical pin 13
 GREEN_LED_GPIO = 22     # Physical pin 15
 
