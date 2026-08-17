@@ -1,8 +1,7 @@
 [Unit]
 Description=Raspberry Pi OLED control panel and RGB status LED
 DefaultDependencies=no
-After=local-fs.target dev-i2c\x2d1.device
-Requires=dev-i2c\x2d1.device
+After=local-fs.target
 Before=basic.target multi-user.target
 
 [Service]
