@@ -1,6 +1,9 @@
 [Unit]
 Description=Raspberry Pi OLED control panel and RGB status LED
-After=local-fs.target
+DefaultDependencies=no
+After=local-fs.target dev-i2c\x2d1.device
+Requires=dev-i2c\x2d1.device
+Before=basic.target multi-user.target
 
 [Service]
 Type=simple
@@ -11,7 +14,7 @@ Environment=HOME=@SERVICE_HOME@
 Environment=PYTHONUNBUFFERED=1
 ExecStart=@REPO_ROOT@/.venv/bin/python @REPO_ROOT@/lightGUI.py
 Restart=always
-RestartSec=5
+RestartSec=1
 TimeoutStopSec=10
 KillSignal=SIGTERM
 
