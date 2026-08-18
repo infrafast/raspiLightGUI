@@ -7,17 +7,12 @@ case "$1" in
   prereqs) prereqs; exit 0 ;;
 esac
 
-STATUS_FILE=/run/raspilightgui-initramfs.status
-
-write_status() {
-  printf '%s\n' "$1" >> "$STATUS_FILE" 2>/dev/null || true
-}
+STATUS=/run/raspilightgui-initramfs.status
+: > "$STATUS" 2>/dev/null || true
+printf 'SCRIPT_STARTED=1\n' >> "$STATUS" 2>/dev/null || true
 
 # Never make OLED feedback a boot dependency. Try to expose I2C1, wait briefly
 # for the userspace device node, display the icon when possible, then continue.
-: > "$STATUS_FILE" 2>/dev/null || true
-write_status "SCRIPT_STARTED=1"
-
 modprobe i2c_designware_platform >/dev/null 2>&1 || true
 modprobe i2c_dev >/dev/null 2>&1 || true
 
@@ -28,22 +23,19 @@ while [ ! -e /dev/i2c-1 ] && [ "$n" -lt 20 ]; do
 done
 
 if [ ! -e /dev/i2c-1 ]; then
-  write_status "I2C_AVAILABLE=0"
-  write_status "DISPLAYCTL_EXECUTED=0"
+  printf 'I2C_AVAILABLE=0\nDISPLAYCTL_EXECUTED=0\n' >> "$STATUS" 2>/dev/null || true
   exit 0
 fi
 
-write_status "I2C_AVAILABLE=1"
+printf 'I2C_AVAILABLE=1\n' >> "$STATUS" 2>/dev/null || true
 
 if [ ! -x /usr/local/bin/displayctl ]; then
-  write_status "DISPLAYCTL_EXECUTED=0"
-  write_status "DISPLAYCTL_REASON=missing"
+  printf 'DISPLAYCTL_EXECUTED=0\nDISPLAYCTL_MISSING=1\n' >> "$STATUS" 2>/dev/null || true
   exit 0
 fi
 
 /usr/local/bin/displayctl boot >/dev/null 2>&1
 status=$?
-write_status "DISPLAYCTL_EXECUTED=1"
-write_status "DISPLAYCTL_EXIT_CODE=$status"
+printf 'DISPLAYCTL_EXECUTED=1\nDISPLAYCTL_EXIT_CODE=%s\n' "$status" >> "$STATUS" 2>/dev/null || true
 
 exit 0
