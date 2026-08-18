@@ -1,9 +1,8 @@
 #include <cerrno>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
-#include <iostream>
-#include <string_view>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -22,14 +21,28 @@ constexpr std::size_t kFramebufferSize = kWidth * kPages;
 static_assert(kFramebufferSize == displayctl_icons::kSize,
               "DisplayCTL icon size must match the SSD1306 framebuffer");
 
-bool write_all(int fd, const std::uint8_t* data, std::size_t size) {
+template <std::size_t N>
+void write_stderr(const char (&message)[N]) {
+    std::size_t offset = 0;
+    constexpr std::size_t size = N - 1;
+    while (offset < size) {
+        const ssize_t written = ::write(STDERR_FILENO, message + offset, size - offset);
+        if (written < 0) {
+            if (errno == EINTR) continue;
+            return;
+        }
+        offset += static_cast<std::size_t>(written);
+    }
+}
+
+bool write_all(int fd, const std::uint8_t* bytes, std::size_t size) {
     while (size > 0) {
-        const ssize_t written = ::write(fd, data, size);
+        const ssize_t written = ::write(fd, bytes, size);
         if (written < 0) {
             if (errno == EINTR) continue;
             return false;
         }
-        data += written;
+        bytes += written;
         size -= static_cast<std::size_t>(written);
     }
     return true;
@@ -84,48 +97,48 @@ bool show_bitmap(int fd, const std::uint8_t* bitmap) {
     return data(fd, bitmap, kFramebufferSize);
 }
 
-const std::uint8_t* select_icon(std::string_view name) {
+const std::uint8_t* select_icon(const char* name) {
     using namespace displayctl_icons;
-    if (name == "boot") return kBoot.data();
-    if (name == "shutdown") return kShutdown.data();
-    if (name == "reboot") return kReboot.data();
-    if (name == "panic") return kPanic.data();
-    if (name == "updating") return kUpdating.data();
+    if (std::strcmp(name, "boot") == 0) return kBoot.data();
+    if (std::strcmp(name, "shutdown") == 0) return kShutdown.data();
+    if (std::strcmp(name, "reboot") == 0) return kReboot.data();
+    if (std::strcmp(name, "panic") == 0) return kPanic.data();
+    if (std::strcmp(name, "updating") == 0) return kUpdating.data();
     return nullptr;
 }
 
-void usage(const char* argv0) {
-    std::cerr << "Usage: " << argv0 << " {boot|shutdown|reboot|panic|updating}\n";
+void usage() {
+    write_stderr("Usage: displayctl {boot|shutdown|reboot|panic|updating}\n");
 }
 } // namespace
 
 int main(int argc, char** argv) {
     if (argc != 2) {
-        usage(argv[0]);
+        usage();
         return 2;
     }
 
     const auto* bitmap = select_icon(argv[1]);
     if (!bitmap) {
-        usage(argv[0]);
+        usage();
         return 2;
     }
 
     const int fd = ::open(kI2cDevice, O_RDWR | O_CLOEXEC);
     if (fd < 0) {
-        std::cerr << "displayctl: cannot open " << kI2cDevice << ": " << std::strerror(errno) << "\n";
+        write_stderr("displayctl: cannot open /dev/i2c-1\n");
         return 1;
     }
 
     if (::ioctl(fd, I2C_SLAVE, kI2cAddress) < 0) {
-        std::cerr << "displayctl: cannot select I2C address 0x3C: " << std::strerror(errno) << "\n";
+        write_stderr("displayctl: cannot select I2C address 0x3C\n");
         ::close(fd);
         return 1;
     }
 
     const bool ok = init_ssd1306(fd) && show_bitmap(fd, bitmap);
     if (!ok) {
-        std::cerr << "displayctl: I2C write failed: " << std::strerror(errno) << "\n";
+        write_stderr("displayctl: I2C write failed\n");
     }
 
     ::close(fd);
