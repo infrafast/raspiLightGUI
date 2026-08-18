@@ -121,14 +121,14 @@ def system_action_menu() -> ActionMenu:
                 "Reboot",
                 reboot_pi,
                 confirm=True,
-                progress_message="Rebooting...",
+                progress_message="Please wait...",
                 terminal=True,
             ),
             ActionItem(
                 "Shutdown",
                 shutdown_pi,
                 confirm=True,
-                progress_message="Shutting down...",
+                progress_message="Please wait...",
                 terminal=True,
             ),
             ActionItem("Back"),
@@ -293,12 +293,8 @@ class DashboardPresenter:
             result = "Action failed"
         if item.service is not None:
             self.wait_for_service_settle(item.service)
-        if item.terminal and result == "Shutdown requested":
-            self.display("SYSTEM", ["Shutting down...", "Please wait"])
-            while True:
-                signal.pause()
-        if item.terminal and result == "Reboot requested":
-            self.display("SYSTEM", ["Rebooting...", "Please wait"])
+        if item.terminal and result in ("Shutdown requested", "Reboot requested"):
+            self.display("SYSTEM", [item.label, "Please wait..."])
             while True:
                 signal.pause()
         self.shutdown_in_progress = False
