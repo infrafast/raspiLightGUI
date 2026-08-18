@@ -9,6 +9,12 @@ embedded system or equipment rack. It combines:
 - confirmed restart, stop, and shutdown actions;
 - one continuously supervised systemd service.
 
+The repository also contains `DisplayCTL`, a minimal native helper intended to
+show full-screen status icons on the same OLED during very early boot and during
+shutdown or reboot, when the Python control panel is not running. Technical
+implementation, compilation, initramfs integration, and validation details are
+kept in [AGENT.md](AGENT.md).
+
 ## Included rack profile
 
 The application is supplied preconfigured for a live-production rack running:
@@ -147,9 +153,9 @@ QLC+. The LED continues working when the OLED is disconnected or asleep.
 | RGB common cathode | GND | 14 | LED common cathode |
 | OLED SDA | GPIO2 | 3 | SDA |
 | OLED SCL | GPIO3 | 5 | SCL |
-| Button Down / Back | GPI13 | 33 | Other terminal to common button GND |
+| Button Down / Back | GPIO13 | 33 | Other terminal to common button GND |
 | Button Select / OK | GPIO6 | 31 | Other terminal to common button GND |
-| Button Up / Next | GPIO05 | 29 | Other terminal to common button GND |
+| Button Up / Next | GPIO5 | 29 | Other terminal to common button GND |
 | RGB blue anode | GPIO27 | 13 | Through 330 ohm resistor |
 | RGB green anode | GPIO22 | 15 | Through 330 ohm resistor |
 
@@ -195,6 +201,29 @@ default whenever the menu is entered.
 
 The OLED sleeps after five minutes without input. The first button press wakes
 it without navigating or executing an action.
+
+## DisplayCTL
+
+`DisplayCTL` is a short-lived native command that writes one full-screen icon to
+the SSD1306 and exits. It is intended for boot, shutdown, reboot, panic, and
+update status indications outside the normal raspiLightGUI session.
+
+The currently available commands are:
+
+```bash
+displayctl boot
+displayctl shutdown
+displayctl reboot
+displayctl panic
+displayctl updating
+```
+
+During the current development stage the embedded icon bitmaps are placeholders,
+so these commands clear the display to black. Native compilation and direct
+OLED access have been validated on Raspberry Pi.
+
+For compilation, static-build requirements, initramfs integration, bitmap
+format, and systemd hand-off details, see [AGENT.md](AGENT.md).
 
 ## Installation
 
