@@ -163,16 +163,25 @@ cd displayctl
 make
 ```
 
-The Makefile also provides an intended static build:
+The Makefile also provides the optimized static build intended for initramfs:
 
 ```bash
 make static
 ```
 
-The static target is not considered validated until the produced binary has been
-built on the target toolchain and verified with `file` and `ldd` (or equivalent)
-to have no runtime dynamic-library dependency. Do not claim initramfs readiness
-before that verification.
+On the target Raspberry Pi this optimized build produced a 597816-byte (about
+584 KiB) ARM64 executable. `file` reported it as statically linked and stripped,
+`ldd` reported `not a dynamic executable`, and `readelf -l` showed no dynamic
+interpreter. The executable itself was run successfully after the optimization.
+The OLED was not physically observable during that final optimized-build test,
+so the rendering result is assumed from the previously validated icon build and
+must be visually rechecked when physical access is available.
+
+If that later visual check reveals a rendering regression, compare or revert the
+optimization introduced by commits `2c98cfb6505560e78079cb07e1cb506abdac3b1f`
+(`displayctl.cpp`) and `c7819312926ef00e438792d4033a19c5308af34f`
+(`displayctl/Makefile`). The pre-optimization implementation had already been
+visually validated on the target OLED.
 
 ### Initramfs integration constraints
 
@@ -203,8 +212,12 @@ Current hardware validation state:
 2. **Embedded production icons: VALIDATED.** `boot`, `shutdown`, `reboot`,
    `panic`, and `updating` have all been displayed successfully on the target
    OLED. Exact artwork positioning may still be refined later.
-3. **Static binary suitable for initramfs: PENDING.** `make static` exists but
-   must still be built and verified on the target Pi.
+3. **Static binary suitable for initramfs: VALIDATED WITH VISUAL RECHECK DUE.**
+   The optimized `make static` build is 597816 bytes (about 584 KiB), statically
+   linked, stripped, has no dynamic interpreter, and executes successfully on the
+   target Raspberry Pi. Physical OLED output was not visible during this final
+   optimized-build test; retain the pre-optimization implementation as the known
+   visually validated fallback until the optimized binary is visually checked.
 4. **Shutdown/reboot systemd hand-off: PENDING.** No validated stop-order hook is
    documented yet.
 5. **Initramfs boot integration: PENDING.** No initramfs procedure is considered
@@ -330,29 +343,3 @@ The systemd unit must invoke `.venv/bin/python` by absolute path, use the
 repository as its working directory, rely on the application's default `lgpio`
 selection, and use `Restart=always`. It must work without venv activation, an
 environment prefix, or an interactive shell.
-
-## Validation after changes
-
-Run checks proportional to the change. At minimum:
-
-```bash
-python - <<'PY'
-from pathlib import Path
-for path in Path('.').glob('*.py'):
-    compile(path.read_text(), str(path), 'exec')
-PY
-bash -n raspi_service_pack/install.sh raspi_service_pack/raspilightgui-service
-git diff --check
-```
-
-For DisplayCTL source or build changes, also run:
-
-```bash
-make -C displayctl clean
-make -C displayctl
-```
-
-Do not leave generated `__pycache__`, `.pyc`, or `displayctl/displayctl` build
-artifacts in committed source changes. Hardware changes also require Raspberry
-Pi validation of GPIO ownership, button events, OLED layout, I2C fallback, LED
-colours/cadence, signals, systemd restart, and any relevant DisplayCTL hand-off.
