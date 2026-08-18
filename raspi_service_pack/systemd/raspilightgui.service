@@ -2,7 +2,8 @@
 Description=Raspberry Pi OLED control panel and RGB status LED
 DefaultDependencies=no
 After=local-fs.target
-Before=basic.target multi-user.target
+Before=basic.target multi-user.target shutdown.target
+Conflicts=shutdown.target
 
 [Service]
 Type=simple
