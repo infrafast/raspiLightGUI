@@ -1,0 +1,12 @@
+[Unit]
+Description=DisplayCTL poweroff icon
+DefaultDependencies=no
+After=raspilightgui.service
+Before=poweroff.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/displayctl shutdown
+
+[Install]
+WantedBy=poweroff.target
