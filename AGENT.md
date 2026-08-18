@@ -31,6 +31,10 @@
   describe the result in `README.md` and its implementation constraints here.
 - Never let documentation describe behaviour that has not been implemented and
   verified.
+- For DisplayCTL, document a milestone as validated only after it has been
+  exercised on the target Raspberry Pi. Keep planned or untested initramfs,
+  static-link, shutdown, reboot, panic, and update integrations explicitly marked
+  as pending until confirmed on hardware.
 
 ## Project constraints
 
@@ -92,11 +96,115 @@
 - `raspi_service_pack/install.sh`: read-only preflight and permanent installer.
 - `raspi_service_pack/systemd/raspilightgui.service`: systemd template.
 - `raspi_service_pack/raspilightgui-service`: installed administration client.
+- `displayctl/displayctl.cpp`: minimal native SSD1306 helper used outside the
+  normal raspiLightGUI lifetime.
+- `displayctl/Makefile`: normal and intended static builds for DisplayCTL.
 
 Keep presentation, input, probes, GPIO ownership, and policy separated. Put a
 new reusable non-service probe in `system_monitor.py`; do not duplicate probes
 in OLED and LED code. Add a managed service only in `MANAGED_SERVICES`, not with
 per-service callbacks or rendering branches.
+
+## DisplayCTL
+
+### Purpose and scope
+
+DisplayCTL is intentionally separate from the resident Python application. Its
+only job is to select one embedded 128x64 monochrome bitmap, initialise the
+SSD1306 over I2C, write that complete framebuffer, and exit. It must never gain
+text rendering, fonts, layout logic, menus, polling, GPIO handling, service
+monitoring, or a resident process.
+
+The command interface is currently:
+
+```text
+displayctl boot
+displayctl shutdown
+displayctl reboot
+displayctl panic
+displayctl updating
+```
+
+The source opens `/dev/i2c-1`, selects SSD1306 address `0x3C`, writes controller
+initialisation commands, configures the full 128x64 RAM window, transfers the
+1024-byte framebuffer, closes the descriptor, and exits. It intentionally uses
+Linux system calls and the kernel I2C userspace ABI rather than a display
+library.
+
+All production icons must be compiled into the executable as fixed 1024-byte
+bitmaps. Do not add external image files, runtime conversion, fonts, asset
+folders, or configuration files required by the executable.
+
+### OLED ownership and hand-off
+
+DisplayCTL and raspiLightGUI must not write to the SSD1306 concurrently.
+The intended lifecycle is:
+
+```text
+initramfs -> displayctl boot -> DisplayCTL exits
+systemd   -> raspiLightGUI takes ownership
+shutdown  -> raspiLightGUI stops -> displayctl shutdown/reboot -> DisplayCTL exits
+```
+
+Do not add a daemon, lock manager, or background helper merely to coordinate the
+handoff. Ordering should be enforced by initramfs flow and systemd dependencies.
+
+### Build
+
+The normal native build is defined by `displayctl/Makefile`:
+
+```bash
+cd displayctl
+make
+```
+
+The Makefile also provides an intended static build:
+
+```bash
+make static
+```
+
+The static target is not considered validated until the produced binary has been
+built on the target toolchain and verified with `file` and `ldd` (or equivalent)
+to have no runtime dynamic-library dependency. Do not claim initramfs readiness
+before that verification.
+
+### Initramfs integration constraints
+
+Initramfs integration is planned but not yet validated. Before enabling it,
+confirm all of the following on the target Raspberry Pi:
+
+- the selected initramfs contains the DisplayCTL binary;
+- the I2C controller driver and required device-tree configuration are available
+  early enough for `/dev/i2c-1` to exist;
+- the initramfs has the device nodes and minimal userspace support required by
+  the executable;
+- the binary is truly static, or every required dynamic object is deliberately
+  included;
+- invoking `displayctl boot` from the initramfs displays the boot icon before
+  the normal root filesystem and raspiLightGUI take over;
+- the normal system can subsequently initialise and update the same SSD1306.
+
+The final initramfs build/update procedure must be documented here only after it
+has been tested end to end on the target Pi.
+
+### Validation milestones
+
+Current hardware validation state:
+
+1. **Native compile and direct OLED write: VALIDATED.** `make` succeeds on the
+   Raspberry Pi, the executable runs, initialises the connected SSD1306, and the
+   current placeholder framebuffer produces the expected black screen.
+2. **Embedded production icons: PENDING.** Current bitmaps are placeholders.
+3. **Static binary suitable for initramfs: PENDING.** `make static` exists but
+   must still be built and verified on the target Pi.
+4. **Shutdown/reboot systemd hand-off: PENDING.** No validated stop-order hook is
+   documented yet.
+5. **Initramfs boot integration: PENDING.** No initramfs procedure is considered
+   production-ready yet.
+
+Update this list immediately when a milestone is confirmed on the Raspberry Pi,
+and update the user-visible behaviour in `README.md` at the same time.
 
 ## Behavioural invariants
 
@@ -230,6 +338,14 @@ bash -n raspi_service_pack/install.sh raspi_service_pack/raspilightgui-service
 git diff --check
 ```
 
-Do not leave generated `__pycache__` or `.pyc` changes in the worktree. Hardware
-changes also require Raspberry Pi validation of GPIO ownership, button events,
-OLED layout, I2C fallback, LED colours/cadence, signals, and systemd restart.
+For DisplayCTL source or build changes, also run:
+
+```bash
+make -C displayctl clean
+make -C displayctl
+```
+
+Do not leave generated `__pycache__`, `.pyc`, or `displayctl/displayctl` build
+artifacts in committed source changes. Hardware changes also require Raspberry
+Pi validation of GPIO ownership, button events, OLED layout, I2C fallback, LED
+colours/cadence, signals, systemd restart, and any relevant DisplayCTL hand-off.
