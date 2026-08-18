@@ -9,6 +9,8 @@
 
 #include <linux/i2c-dev.h>
 
+#include "icons.h"
+
 namespace {
 constexpr const char* kI2cDevice = "/dev/i2c-1";
 constexpr int kI2cAddress = 0x3C;
@@ -17,16 +19,8 @@ constexpr int kHeight = 64;
 constexpr int kPages = kHeight / 8;
 constexpr std::size_t kFramebufferSize = kWidth * kPages;
 
-using Bitmap = const std::uint8_t (&)[kFramebufferSize];
-
-constexpr std::uint8_t kBoot[kFramebufferSize] = {
-    // Placeholder icon. Replace with generated 128x64 monochrome bitmap bytes.
-    0x00
-};
-constexpr std::uint8_t kShutdown[kFramebufferSize] = {0x00};
-constexpr std::uint8_t kReboot[kFramebufferSize] = {0x00};
-constexpr std::uint8_t kPanic[kFramebufferSize] = {0x00};
-constexpr std::uint8_t kUpdating[kFramebufferSize] = {0x00};
+static_assert(kFramebufferSize == displayctl_icons::kSize,
+              "DisplayCTL icon size must match the SSD1306 framebuffer");
 
 bool write_all(int fd, const std::uint8_t* data, std::size_t size) {
     while (size > 0) {
@@ -91,11 +85,12 @@ bool show_bitmap(int fd, const std::uint8_t* bitmap) {
 }
 
 const std::uint8_t* select_icon(std::string_view name) {
-    if (name == "boot") return kBoot;
-    if (name == "shutdown") return kShutdown;
-    if (name == "reboot") return kReboot;
-    if (name == "panic") return kPanic;
-    if (name == "updating") return kUpdating;
+    using namespace displayctl_icons;
+    if (name == "boot") return kBoot.data();
+    if (name == "shutdown") return kShutdown.data();
+    if (name == "reboot") return kReboot.data();
+    if (name == "panic") return kPanic.data();
+    if (name == "updating") return kUpdating.data();
     return nullptr;
 }
 
