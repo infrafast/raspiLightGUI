@@ -9,6 +9,10 @@ namespace displayctl_icons {
 constexpr int kWidth = 128;
 constexpr int kHeight = 64;
 constexpr int kPages = kHeight / 8;
+constexpr int kReservedTopRows = 16;
+constexpr int kArtworkHeight = kHeight - kReservedTopRows;
+constexpr int kArtworkWidth = 96; // 128 * 3 / 4, preserving aspect ratio.
+constexpr int kArtworkXOffset = (kWidth - kArtworkWidth) / 2;
 constexpr std::size_t kSize = kWidth * kPages;
 using Framebuffer = std::array<std::uint8_t, kSize>;
 
@@ -16,6 +20,12 @@ constexpr void pixel(Framebuffer& fb, int x, int y) {
     if (x < 0 || x >= kWidth || y < 0 || y >= kHeight) return;
     fb[static_cast<std::size_t>((y / 8) * kWidth + x)] |=
         static_cast<std::uint8_t>(1u << (y & 7));
+}
+
+constexpr bool get_pixel(const Framebuffer& fb, int x, int y) {
+    if (x < 0 || x >= kWidth || y < 0 || y >= kHeight) return false;
+    return (fb[static_cast<std::size_t>((y / 8) * kWidth + x)] &
+            static_cast<std::uint8_t>(1u << (y & 7))) != 0;
 }
 
 constexpr void filled_rect(Framebuffer& fb, int x0, int y0, int x1, int y1) {
@@ -65,26 +75,44 @@ constexpr void triangle_outline(Framebuffer& fb, int ax, int ay, int bx, int by,
     line(fb, cx, cy, ax, ay, thickness);
 }
 
-constexpr Framebuffer make_boot() {
+// Scale a full 128x64 source uniformly to 96x48 and place it in rows 16..63.
+// This guarantees that rows 0..15 stay completely blank for every icon while
+// preserving the source artwork aspect ratio.
+constexpr Framebuffer fit_below_reserved_area(const Framebuffer& source) {
+    Framebuffer output{};
+    for (int y = 0; y < kArtworkHeight; ++y) {
+        const int source_y = (y * kHeight) / kArtworkHeight;
+        for (int x = 0; x < kArtworkWidth; ++x) {
+            const int source_x = (x * kWidth) / kArtworkWidth;
+            if (get_pixel(source, source_x, source_y)) {
+                pixel(output, kArtworkXOffset + x, kReservedTopRows + y);
+            }
+        }
+    }
+    return output;
+}
+
+constexpr Framebuffer make_boot_source() {
     Framebuffer fb{};
+    // Hourglass: two horizontal caps, crossed sides and a compact sand pile.
+    line(fb, 43, 10, 85, 10, 4);
+    line(fb, 43, 54, 85, 54, 4);
+    line(fb, 46, 13, 82, 51, 3);
+    line(fb, 82, 13, 46, 51, 3);
+    filled_rect(fb, 58, 29, 70, 35);
+    line(fb, 53, 45, 75, 45, 2);
+    return fb;
+}
+
+constexpr Framebuffer make_shutdown_source() {
+    Framebuffer fb{};
+    // Power symbol only; no directional arrow.
     ring(fb, 64, 34, 17 * 17, 22 * 22, true);
     line(fb, 64, 8, 64, 34, 5);
-    line(fb, 55, 17, 64, 8, 3);
-    line(fb, 64, 8, 73, 17, 3);
     return fb;
 }
 
-constexpr Framebuffer make_shutdown() {
-    Framebuffer fb{};
-    ring(fb, 64, 27, 15 * 15, 20 * 20, true);
-    line(fb, 64, 6, 64, 28, 5);
-    line(fb, 64, 40, 64, 57, 4);
-    line(fb, 55, 49, 64, 58, 4);
-    line(fb, 64, 58, 73, 49, 4);
-    return fb;
-}
-
-constexpr Framebuffer make_reboot() {
+constexpr Framebuffer make_reboot_source() {
     Framebuffer fb{};
     // Two broken halves of one circular arrow, leaving clear gaps left/right.
     for (int y = 0; y < kHeight; ++y) {
@@ -97,7 +125,6 @@ constexpr Framebuffer make_reboot() {
             pixel(fb, x, y);
         }
     }
-    // Arrowheads.
     for (int i = 0; i < 11; ++i) {
         line(fb, 83 - i, 18 + i / 2, 83 - i, 28 - i / 2, 1);
         line(fb, 45 + i, 46 - i / 2, 45 + i, 36 + i / 2, 1);
@@ -105,7 +132,7 @@ constexpr Framebuffer make_reboot() {
     return fb;
 }
 
-constexpr Framebuffer make_panic() {
+constexpr Framebuffer make_panic_source() {
     Framebuffer fb{};
     triangle_outline(fb, 64, 5, 112, 56, 16, 56, 4);
     filled_rect(fb, 61, 19, 67, 41);
@@ -113,9 +140,8 @@ constexpr Framebuffer make_panic() {
     return fb;
 }
 
-constexpr Framebuffer make_updating() {
+constexpr Framebuffer make_updating_source() {
     Framebuffer fb{};
-    // Compact circular update symbol.
     for (int y = 0; y < 50; ++y) {
         for (int x = 35; x < 93; ++x) {
             const int dx = x - 64;
@@ -131,7 +157,6 @@ constexpr Framebuffer make_updating() {
         line(fb, 49 + i, 41 - i / 2, 49 + i, 32 + i / 2, 1);
     }
 
-    // Progress bar: fixed icon, not an animation.
     line(fb, 24, 54, 104, 54, 2);
     line(fb, 24, 61, 104, 61, 2);
     line(fb, 24, 54, 24, 61, 2);
@@ -140,11 +165,11 @@ constexpr Framebuffer make_updating() {
     return fb;
 }
 
-inline constexpr Framebuffer kBoot = make_boot();
-inline constexpr Framebuffer kShutdown = make_shutdown();
-inline constexpr Framebuffer kReboot = make_reboot();
-inline constexpr Framebuffer kPanic = make_panic();
-inline constexpr Framebuffer kUpdating = make_updating();
+inline constexpr Framebuffer kBoot = fit_below_reserved_area(make_boot_source());
+inline constexpr Framebuffer kShutdown = fit_below_reserved_area(make_shutdown_source());
+inline constexpr Framebuffer kReboot = fit_below_reserved_area(make_reboot_source());
+inline constexpr Framebuffer kPanic = fit_below_reserved_area(make_panic_source());
+inline constexpr Framebuffer kUpdating = fit_below_reserved_area(make_updating_source());
 
 static_assert(kBoot.size() == 1024, "SSD1306 framebuffer must be 1024 bytes");
 
