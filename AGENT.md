@@ -135,6 +135,11 @@ All production icons must be compiled into the executable as fixed 1024-byte
 bitmaps. Do not add external image files, runtime conversion, fonts, asset
 folders, or configuration files required by the executable.
 
+The current five icon commands have been validated on the target OLED. Artwork
+and pixel positioning may still be refined later without reopening the milestone
+as long as command semantics, embedded-only assets, and full-screen rendering
+behaviour remain unchanged.
+
 ### OLED ownership and hand-off
 
 DisplayCTL and raspiLightGUI must not write to the SSD1306 concurrently.
@@ -193,9 +198,11 @@ has been tested end to end on the target Pi.
 Current hardware validation state:
 
 1. **Native compile and direct OLED write: VALIDATED.** `make` succeeds on the
-   Raspberry Pi, the executable runs, initialises the connected SSD1306, and the
-   current placeholder framebuffer produces the expected black screen.
-2. **Embedded production icons: PENDING.** Current bitmaps are placeholders.
+   Raspberry Pi, the executable runs, initialises the connected SSD1306, and a
+   full framebuffer is written successfully.
+2. **Embedded production icons: VALIDATED.** `boot`, `shutdown`, `reboot`,
+   `panic`, and `updating` have all been displayed successfully on the target
+   OLED. Exact artwork positioning may still be refined later.
 3. **Static binary suitable for initramfs: PENDING.** `make static` exists but
    must still be built and verified on the target Pi.
 4. **Shutdown/reboot systemd hand-off: PENDING.** No validated stop-order hook is
