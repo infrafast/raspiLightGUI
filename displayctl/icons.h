@@ -78,17 +78,17 @@ constexpr Framebuffer make_shutdown() {
     Framebuffer fb{};
     ring(fb, 64, 27, 15 * 15, 20 * 20, true);
     line(fb, 64, 6, 64, 28, 5);
-    line(fb, 64, 40, 64, 57, 4);
+/*    line(fb, 64, 40, 64, 57, 4);
     line(fb, 55, 49, 64, 58, 4);
     line(fb, 64, 58, 73, 49, 4);
-    return fb;
+  */  return fb;
 }
 
 constexpr Framebuffer make_reboot() {
     Framebuffer fb{};
     // Two broken halves of one circular arrow, leaving clear gaps left/right.
-    for (int y = 0; y < kHeight; ++y) {
-        for (int x = 0; x < kWidth; ++x) {
+    for (int y = 0; y < kHeight/2; ++y) {
+        for (int x = 0; x < kWidth/2; ++x) {
             const int dx = x - 64;
             const int dy = y - 32;
             const int r2 = dx * dx + dy * dy;
