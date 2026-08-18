@@ -218,9 +218,9 @@ displayctl panic
 displayctl updating
 ```
 
-During the current development stage the embedded icon bitmaps are placeholders,
-so these commands clear the display to black. Native compilation and direct
-OLED access have been validated on Raspberry Pi.
+The five embedded icons have been validated on the Raspberry Pi OLED. Their
+artwork and exact positioning may still be refined without changing the command
+interface or DisplayCTL behaviour.
 
 For compilation, static-build requirements, initramfs integration, bitmap
 format, and systemd hand-off details, see [AGENT.md](AGENT.md).
