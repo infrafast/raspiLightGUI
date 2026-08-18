@@ -112,8 +112,10 @@ a contextual submenu that can:
 - select `Auto` to enable startup at boot, or `Manual` to disable it.
 
 `Reboot` and `Shutdown` remain in the main `SYSTEM` menu and require
-confirmation. `Back` returns from a service submenu to `SYSTEM`, then from
-`SYSTEM` to screen navigation.
+confirmation. After confirmation, both hardware and simulated console interfaces
+show the same wait screen: title `SYSTEM`, the selected action (`Reboot` or
+`Shutdown`), then `Please wait...`. `Back` returns from a service submenu to
+`SYSTEM`, then from `SYSTEM` to screen navigation.
 
 Stopping a service, switching it to `Manual`, rebooting, and shutting down
 require confirmation. Starting, restarting, and switching a service to `Auto`
