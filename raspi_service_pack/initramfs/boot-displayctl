@@ -7,13 +7,14 @@ case "$1" in
   prereqs) prereqs; exit 0 ;;
 esac
 
-# Never make OLED feedback a boot dependency. Try to expose I2C1, wait briefly
-# for the userspace device node, display the icon when possible, then continue.
+# Never make OLED feedback a boot dependency. Load the userspace I2C interface,
+# then wait long enough for the Raspberry Pi 5 RP1/DesignWare adapter and
+# /dev/i2c-1 node to appear before attempting DisplayCTL. Always fail open.
 modprobe i2c_designware_platform >/dev/null 2>&1 || true
 modprobe i2c_dev >/dev/null 2>&1 || true
 
 n=0
-while [ ! -e /dev/i2c-1 ] && [ "$n" -lt 20 ]; do
+while [ ! -e /dev/i2c-1 ] && [ "$n" -lt 100 ]; do
   sleep 0.05
   n=$((n + 1))
 done
