@@ -5,9 +5,11 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 SERVICE_CLIENT=/usr/local/bin/raspilightgui-service
 APP_UNIT=raspilightgui.service
+DISPLAYCTL=/usr/local/bin/displayctl
+DISPLAYCTL_UNITS=(displayctl-poweroff.service displayctl-reboot.service)
 service_user=${SUDO_USER:-pi}
 check_only=false
-required_commands=(apt-get systemctl)
+required_commands=(apt-get systemctl make g++)
 required_imports=(adafruit_ssd1306 board busio gpiozero lgpio PIL psutil)
 
 usage() {
@@ -37,7 +39,8 @@ report_preflight() {
     if command -v "$command_name" >/dev/null 2>&1; then
       echo "  OK      command: $command_name"
     else
-      fail "required command '$command_name' is missing"
+      echo "  MISSING command: $command_name (installed during setup)"
+      missing=true
     fi
   done
   if command -v python3 >/dev/null 2>&1; then
@@ -107,6 +110,12 @@ service_home=$(getent passwd "$service_user" | cut -d: -f6)
 service_group=$(id -gn "$service_user")
 [[ -r $REPO_ROOT/lightGUI.py ]] || fail "missing lightGUI.py"
 [[ -r $REPO_ROOT/requirements.txt ]] || fail "missing requirements.txt"
+[[ -r $REPO_ROOT/displayctl/displayctl.cpp ]] || fail "missing displayctl/displayctl.cpp"
+[[ -r $REPO_ROOT/displayctl/icons.h ]] || fail "missing displayctl/icons.h"
+[[ -r $REPO_ROOT/displayctl/Makefile ]] || fail "missing displayctl/Makefile"
+for unit in "${DISPLAYCTL_UNITS[@]}"; do
+  [[ -r $SCRIPT_DIR/systemd/$unit ]] || fail "missing systemd unit $unit"
+done
 
 echo "raspiLightGUI Raspberry Pi installation"
 echo "  repository:   $REPO_ROOT"
@@ -123,7 +132,9 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y \
   fonts-dejavu-core \
+  g++ \
   i2c-tools \
+  make \
   python3 \
   python3-pip \
   python3-venv \
@@ -156,6 +167,14 @@ print("Python runtime dependencies verified: " + ", ".join(sys.argv[1:]))
 PY
 runuser -u "$service_user" -- test -r "$REPO_ROOT/lightGUI.py"
 
+make -C "$REPO_ROOT/displayctl" static
+install -m 0755 "$REPO_ROOT/displayctl/displayctl" "$DISPLAYCTL"
+file "$DISPLAYCTL"
+ldd "$DISPLAYCTL" 2>&1 || true
+if readelf -l "$DISPLAYCTL" | grep -q interpreter; then
+  fail "installed displayctl unexpectedly has a dynamic interpreter"
+fi
+
 python3 - "$SCRIPT_DIR/raspilightgui-service" "$SERVICE_CLIENT" "$REPO_ROOT" <<'PY'
 import os
 import pathlib
@@ -183,7 +202,14 @@ text = (
 pathlib.Path(destination).write_text(text, encoding="utf-8")
 PY
 chmod 0644 "/etc/systemd/system/$APP_UNIT"
-systemd-analyze verify "/etc/systemd/system/$APP_UNIT"
+
+for unit in "${DISPLAYCTL_UNITS[@]}"; do
+  install -m 0644 "$SCRIPT_DIR/systemd/$unit" "/etc/systemd/system/$unit"
+done
+
+systemd-analyze verify "/etc/systemd/system/$APP_UNIT" \
+  /etc/systemd/system/displayctl-poweroff.service \
+  /etc/systemd/system/displayctl-reboot.service
 
 python3 - "/etc/sudoers.d/raspilightgui-service" "$service_user" "$REPO_ROOT" <<'PY'
 import pathlib
@@ -221,9 +247,11 @@ chmod 0440 /etc/sudoers.d/raspilightgui-service
 visudo -cf /etc/sudoers.d/raspilightgui-service
 
 systemctl daemon-reload
+systemctl enable displayctl-poweroff.service displayctl-reboot.service
 
 echo "Installation complete."
 echo "Manual start: raspilightgui-service start"
 echo "Boot auto-start: raspilightgui-service auto"
 echo "Status: raspilightgui-service status"
 echo "Logs: raspilightgui-service logs"
+echo "DisplayCTL shutdown/reboot hooks: enabled"
