@@ -8,16 +8,14 @@ case "$1" in
 esac
 
 # Never make OLED feedback a boot dependency. Load the userspace I2C interface,
-# then wait long enough for the Raspberry Pi 5 RP1/DesignWare adapter and
-# /dev/i2c-1 node to appear before attempting DisplayCTL. Always fail open.
+# then let udev return as soon as /dev/i2c-1 exists. The timeout is only a
+# fail-open guard; there is no fixed boot delay.
 modprobe i2c_designware_platform >/dev/null 2>&1 || true
 modprobe i2c_dev >/dev/null 2>&1 || true
 
-n=0
-while [ ! -e /dev/i2c-1 ] && [ "$n" -lt 100 ]; do
-  sleep 0.05
-  n=$((n + 1))
-done
+if command -v udevadm >/dev/null 2>&1; then
+  udevadm settle --timeout=5 --exit-if-exists=/dev/i2c-1 >/dev/null 2>&1 || true
+fi
 
 if [ -x /usr/local/bin/displayctl ] && [ -e /dev/i2c-1 ]; then
   /usr/local/bin/displayctl boot >/dev/null 2>&1 || true
