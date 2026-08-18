@@ -1,0 +1,25 @@
+#!/bin/sh
+set -u
+
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in
+  prereqs) prereqs; exit 0 ;;
+esac
+
+# Never make OLED feedback a boot dependency. Try to expose I2C1, wait briefly
+# for the userspace device node, display the icon when possible, then continue.
+modprobe i2c_designware_platform >/dev/null 2>&1 || true
+modprobe i2c_dev >/dev/null 2>&1 || true
+
+n=0
+while [ ! -e /dev/i2c-1 ] && [ "$n" -lt 20 ]; do
+  sleep 0.05
+  n=$((n + 1))
+done
+
+if [ -x /usr/local/bin/displayctl ] && [ -e /dev/i2c-1 ]; then
+  /usr/local/bin/displayctl boot >/dev/null 2>&1 || true
+fi
+
+exit 0
