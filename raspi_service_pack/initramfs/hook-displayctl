@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in
+  prereqs) prereqs; exit 0 ;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+DISPLAYCTL=/usr/local/bin/displayctl
+[ -x "$DISPLAYCTL" ] || exit 0
+
+mkdir -p "$DESTDIR/usr/local/bin"
+copy_exec "$DISPLAYCTL" /usr/local/bin/displayctl
+
+# Raspberry Pi 5 GPIO I2C1 is exposed through the Synopsys DesignWare driver.
+# i2c_dev provides the /dev/i2c-* userspace interface used by DisplayCTL.
+manual_add_modules i2c_designware_core
+manual_add_modules i2c_designware_platform
+manual_add_modules i2c_dev
