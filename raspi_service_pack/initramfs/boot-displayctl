@@ -8,13 +8,13 @@ case "$1" in
 esac
 
 # Never make OLED feedback a boot dependency. Load the userspace I2C interface,
-# then let udev return as soon as /dev/i2c-1 exists. The timeout is only a
-# fail-open guard; there is no fixed boot delay.
+# then wait for /dev/i2c-1 to be created. udevadm wait returns immediately when
+# the device exists; the timeout is only a fail-open guard.
 modprobe i2c_designware_platform >/dev/null 2>&1 || true
 modprobe i2c_dev >/dev/null 2>&1 || true
 
 if command -v udevadm >/dev/null 2>&1; then
-  udevadm settle --timeout=5 --exit-if-exists=/dev/i2c-1 >/dev/null 2>&1 || true
+  udevadm wait --timeout=5 /dev/i2c-1 >/dev/null 2>&1 || true
 fi
 
 if [ -x /usr/local/bin/displayctl ] && [ -e /dev/i2c-1 ]; then
