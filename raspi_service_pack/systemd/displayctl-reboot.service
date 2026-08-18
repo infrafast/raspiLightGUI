@@ -1,0 +1,12 @@
+[Unit]
+Description=DisplayCTL reboot icon
+DefaultDependencies=no
+After=raspilightgui.service
+Before=reboot.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/displayctl reboot
+
+[Install]
+WantedBy=reboot.target
