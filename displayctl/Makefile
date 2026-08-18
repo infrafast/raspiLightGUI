@@ -5,12 +5,13 @@ LDFLAGS ?=
 
 TARGET := displayctl
 SOURCE := displayctl.cpp
+HEADERS := icons.h
 
 .PHONY: all static clean install
 
 all: $(TARGET)
 
-$(TARGET): $(SOURCE)
+$(TARGET): $(SOURCE) $(HEADERS)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SOURCE) $(LDFLAGS) -o $@
 
 # Preferred initramfs build. Requires a static C++ toolchain/libc on the build host.
