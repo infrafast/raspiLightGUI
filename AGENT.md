@@ -185,22 +185,18 @@ visually validated on the target OLED.
 
 ### Initramfs integration constraints
 
-Initramfs integration is planned but not yet validated. Before enabling it,
-confirm all of the following on the target Raspberry Pi:
+An initramfs integration has been assembled and has booted successfully on the
+target Pi without preventing the normal system or raspiLightGUI from starting.
+The production candidate consists only of the initramfs hook that embeds the
+static binary and required I2C modules, plus the fail-open `init-premount` script
+that attempts `displayctl boot`. Temporary remote-diagnostic mechanisms using
+`/dev/kmsg`, initramfs `/run`, `local-bottom`, or `init-bottom` status hand-off
+were removed after proving unreliable for post-boot verification.
 
-- the selected initramfs contains the DisplayCTL binary;
-- the I2C controller driver and required device-tree configuration are available
-  early enough for `/dev/i2c-1` to exist;
-- the initramfs has the device nodes and minimal userspace support required by
-  the executable;
-- the binary is truly static, or every required dynamic object is deliberately
-  included;
-- invoking `displayctl boot` from the initramfs displays the boot icon before
-  the normal root filesystem and raspiLightGUI take over;
-- the normal system can subsequently initialise and update the same SSD1306.
-
-The final initramfs build/update procedure must be documented here only after it
-has been tested end to end on the target Pi.
+Before considering the integration fully validated, confirm physically that the
+boot icon is visible before raspiLightGUI takes over. The integration must remain
+fail-open: failure to load I2C, create `/dev/i2c-1`, find DisplayCTL, or write the
+OLED must never prevent the normal boot sequence.
 
 ### Validation milestones
 
@@ -218,10 +214,18 @@ Current hardware validation state:
    target Raspberry Pi. Physical OLED output was not visible during this final
    optimized-build test; retain the pre-optimization implementation as the known
    visually validated fallback until the optimized binary is visually checked.
-4. **Shutdown/reboot systemd hand-off: PENDING.** No validated stop-order hook is
-   documented yet.
-5. **Initramfs boot integration: PENDING.** No initramfs procedure is considered
-   production-ready yet.
+4. **Shutdown/reboot systemd hand-off: VALIDATED WITH VISUAL RECHECK DUE.** The
+   reboot hook completed successfully in the previous boot journal. The poweroff
+   hook was started without error and the machine completed a normal poweroff;
+   its final completion record was not persisted because logging was already
+   shutting down. Physical icon output remains to be checked on-site.
+5. **Initramfs boot integration: ON HOLD — PHYSICAL VALIDATION PENDING.** The
+   initramfs contains DisplayCTL and the required DesignWare/I2C modules, and the
+   modified image has completed multiple normal boots with raspiLightGUI returning
+   to its hardware backend. Remote attempts to prove the early OLED write through
+   transient logging/status hand-off were inconclusive and have been removed.
+   Assume the fail-open integration is the production candidate until an on-site
+   visual boot test confirms or rejects it.
 
 Update this list immediately when a milestone is confirmed on the Raspberry Pi,
 and update the user-visible behaviour in `README.md` at the same time.
