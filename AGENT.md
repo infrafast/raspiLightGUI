@@ -193,6 +193,24 @@ that attempts `displayctl boot`. Temporary remote-diagnostic mechanisms using
 `/dev/kmsg`, initramfs `/run`, `local-bottom`, or `init-bottom` status hand-off
 were removed after proving unreliable for post-boot verification.
 
+For direct initramfs debugging on the target Pi, append `break=mount` to the
+single line in `/boot/firmware/cmdline.txt` and reboot. This opens an initramfs
+shell after the `init-premount` phase, allowing the installed script and I2C state
+to be inspected directly. Useful checks include:
+
+```sh
+ls -l /dev/i2c-1
+/scripts/init-premount/raspilightgui-displayctl ""
+/usr/local/bin/displayctl boot
+```
+
+The explicit empty argument is useful when reproducing older script revisions
+that used `set -u` together with an unsafe `$1` prereq check. Current scripts
+must use `${1:-}` so normal argument-free initramfs execution cannot abort before
+I2C setup. After debugging, remove `break=mount` from `cmdline.txt`; the file must
+remain a single line, otherwise subsequent boots will continue stopping in the
+initramfs shell.
+
 Before considering the integration fully validated, confirm physically that the
 boot icon is visible before raspiLightGUI takes over. The integration must remain
 fail-open: failure to load I2C, create `/dev/i2c-1`, find DisplayCTL, or write the
